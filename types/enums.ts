@@ -1,0 +1,43 @@
+export enum DiscountType {
+  PERCENTAGE = "PERCENTAGE",
+  FIXED = "FIXED",
+}
+
+export enum ShippingMethod {
+  PICKUP = "PICKUP",
+  DELIVERY = "DELIVERY",
+}
+
+export enum OrderStatus {
+  PENDING_PAYMENT = "PENDING_PAYMENT",
+  PAID = "PAID",
+  PROCESSING = "PROCESSING",
+  READY_FOR_PICKUP = "READY_FOR_PICKUP",
+  SHIPPED = "SHIPPED",
+  COMPLETED = "COMPLETED",
+  CANCELLED = "CANCELLED",
+  EXPIRED = "EXPIRED",
+}
+
+export enum PaymentStatus {
+  UNPAID = "UNPAID",
+  WAITING_CONFIRMATION = "WAITING_CONFIRMATION",
+  PAID = "PAID",
+  FAILED = "FAILED",
+  REFUNDED = "REFUNDED",
+}
+
+export enum ReservationStatus {
+  ACTIVE = "ACTIVE",
+  RELEASED = "RELEASED",
+  CONSUMED = "CONSUMED",
+  EXPIRED = "EXPIRED",
+}
+
+export enum InventoryReason {
+  ORDER = "ORDER",
+  RESTOCK = "RESTOCK",
+  MANUAL = "MANUAL",
+  EXPIRED = "EXPIRED",
+  ADJUSTMENT = "ADJUSTMENT",
+}
