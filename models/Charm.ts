@@ -4,7 +4,7 @@ import { BaseDocument } from "@/types/mongoose";
 import { createModel } from "@/lib/createModel";
 import { DiscountType } from "@/types/enums";
 
-import { ImageSchema } from "@/schemas/image.schema";
+import { ImageSchema, IImage } from "@/schemas/image.schema";
 import { DiscountSchema } from "@/schemas/discount.schema";
 
 export interface ICharm extends BaseDocument {
@@ -14,15 +14,14 @@ export interface ICharm extends BaseDocument {
   slug: string;
   description?: string;
 
-  image: {
-    publicId: string;
-    secureUrl: string;
-  };
+  image: IImage;
 
   price: number;
 
   stock: number;
   reservedStock: number;
+
+  totalSold: number;
 
   weight: number;
 
@@ -34,45 +33,92 @@ export interface ICharm extends BaseDocument {
     endAt?: Date;
   };
 
+  limited: boolean;
+
   active: boolean;
 }
 
-const CharmSchema = new Schema<ICharm>({
-  category: {
-    type: Schema.Types.ObjectId,
-    ref: "Category",
-    required: true,
-    index: true,
-  },
+const CharmSchema = new Schema<ICharm>(
+  {
+    category: {
+      type: Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+      index: true,
+    },
 
-  name: {
-    type: String,
-    required: true,
-    trim: true,
-  },
+    name: {
+      type: String,
+      required: true,
+      trim: true,
+    },
 
-  slug: {
-    type: String,
-    required: true,
-    unique: true,
-    lowercase: true,
-    index: true,
-  },
+    slug: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      index: true,
+    },
 
-  description: {
-    type: String,
-    default: "",
-  },
+    description: {
+      type: String,
+      default: "",
+    },
 
-  image: {
-    type: ImageSchema,
-    required: true,
-  },
+    image: {
+      type: ImageSchema,
+      required: true,
+    },
 
-  discount: {
-    type: DiscountSchema,
-    default: () => ({}),
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+
+    stock: {
+      type: Number,
+      required: true,
+      min: 0,
+      default: 0,
+    },
+
+    reservedStock: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    totalSold: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+
+    weight: {
+      type: Number,
+      default: 0,
+    },
+
+    discount: {
+      type: DiscountSchema,
+      default: () => ({}),
+    },
+
+    limited: {
+      type: Boolean,
+      default: false,
+    },
+
+    active: {
+      type: Boolean,
+      default: true,
+    },
   },
-});
+  {
+    timestamps: true,
+  },
+);
 
 export default createModel<ICharm>("Charm", CharmSchema);

@@ -2,7 +2,24 @@ import { Schema } from "mongoose";
 
 import { ShippingMethod } from "@/types/enums";
 
-export const ShippingSchema = new Schema(
+export interface IShipping {
+  method: ShippingMethod;
+  receiverName?: string;
+  phone?: string;
+  province?: string;
+  regency?: string;
+  district?: string;
+  village?: string;
+  address?: string;
+  postalCode?: string;
+  note?: string;
+  latitude?: number;
+  longitude?: number;
+  distanceKm?: number;
+  shippingCost?: number;
+}
+
+export const ShippingSchema = new Schema<IShipping>(
   {
     method: {
       type: String,

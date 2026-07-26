@@ -52,9 +52,9 @@ const InventoryReservationSchema = new Schema<IInventoryReservation>(
   },
 );
 
-InventoryReservationSchema.index({
-  expiresAt: 1,
-});
+InventoryReservationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+
+InventoryReservationSchema.index({ orderId: 1, status: 1 });
 
 export default createModel<IInventoryReservation>(
   "InventoryReservation",

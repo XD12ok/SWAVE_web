@@ -1,11 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 export default function BackgroundVines() {
   const left = useRef<HTMLDivElement>(null);
   const right = useRef<HTMLDivElement>(null);
+  const [count, setCount] = useState(2);
+
+  useEffect(() => {
+    setCount(window.innerWidth < 768 ? 3 : 2);
+  }, []);
 
   useEffect(() => {
     let raf = 0;
@@ -37,24 +42,23 @@ export default function BackgroundVines() {
     };
   }, []);
 
-  const COUNT = 3;
-
   return (
-    <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+    <div className="fixed inset-0 overflow-hidden pointer-events-none z-10">
       {/* LEFT */}
       <div
         ref={left}
-        className="absolute left-[-12vw] top-0 w-[35vw] opacity-30"
+        className="absolute left-[-12vw] top-0 w-[35vw] opacity-25 will-change-transform"
       >
-        {Array.from({ length: COUNT }).map((_, i) => (
+        {Array.from({ length: count }).map((_, i) => (
           <Image
             key={i}
             src="/goth.png"
             alt=""
-            width={300}
-            height={3800}
+            width={540}
+            height={960}
             className="block w-full h-auto -mt-1"
             draggable={false}
+            loading="lazy"
           />
         ))}
       </div>
@@ -62,17 +66,18 @@ export default function BackgroundVines() {
       {/* RIGHT */}
       <div
         ref={right}
-        className="absolute right-[-12vw] top-0 w-[35vw] opacity-30"
+        className="absolute right-[-12vw] top-0 w-[35vw] opacity-25 will-change-transform"
       >
-        {Array.from({ length: COUNT }).map((_, i) => (
+        {Array.from({ length: count }).map((_, i) => (
           <Image
             key={i}
             src="/goth.png"
             alt=""
-            width={300}
-            height={3800}
+            width={540}
+            height={960}
             className="block w-full h-auto -mt-1"
             draggable={false}
+            loading="lazy"
           />
         ))}
       </div>

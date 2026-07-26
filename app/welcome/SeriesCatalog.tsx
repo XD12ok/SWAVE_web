@@ -10,38 +10,38 @@ gsap.registerPlugin(ScrollTrigger);
 export default function SeriesCatalog() {
   const series = [
     {
-      name: "SWAVE 01",
-      title: "Classic",
-      description: "Elegant stainless bracelet with premium finishing.",
-      image: "/product.png",
+      name: "SWAVE Angel",
+      title: "Angel",
+      description: "",
+      image: "/charm/12.png",
       color: "#ffffff",
     },
     {
-      name: "SWAVE 02",
-      title: "Ocean",
-      description: "Inspired by the calm color of the sea.",
-      image: "/feature1.jpg",
+      name: "SWAVE Lone Star",
+      title: "Lone Star",
+      description: "",
+      image: "/charm/66.png",
       color: "#5DADE2",
     },
     {
-      name: "SWAVE 03",
-      title: "Forest",
-      description: "Natural green edition for outdoor lovers.",
-      image: "/feature2.jpg",
+      name: "SWAVE Gwen",
+      title: "Gwen Stacy",
+      description: "",
+      image: "/charm/72.png",
       color: "#58D68D",
     },
     {
-      name: "SWAVE 04",
-      title: "Midnight",
-      description: "Dark premium edition with luxurious appearance.",
-      image: "/feature3.jpg",
+      name: "SWAVE Butterfly",
+      title: "Midnight Butterfly",
+      description: "",
+      image: "/charm/61.png",
       color: "#8E44AD",
     },
     {
-      name: "SWAVE 05",
-      title: "Sunset",
-      description: "Warm orange edition with modern aesthetics.",
-      image: "/feature4.jpg",
+      name: "SWAVE 510",
+      title: "510",
+      description: "",
+      image: "/charm/2.png",
       color: "#F39C12",
     },
   ];
@@ -55,40 +55,17 @@ export default function SeriesCatalog() {
 
   const changeProduct = (index: number) => {
     if (index === activeIndexRef.current) return;
-
     activeIndexRef.current = index;
-
-    gsap.to(previewRef.current, {
-      opacity: 0,
-      y: 30,
-      scale: 0.95,
-      duration: 0.3,
-      onComplete: () => {
-        setActiveIndex(index);
-
-        gsap.fromTo(
-          previewRef.current,
-          {
-            opacity: 0,
-            y: 30,
-            scale: 1.05,
-          },
-          {
-            opacity: 1,
-            y: 0,
-            scale: 1,
-            duration: 0.5,
-          },
-        );
-      },
-    });
+    setActiveIndex(index);
   };
 
   useEffect(() => {
+    const isMobile = window.innerWidth < 768;
+    const multiplier = isMobile ? 0.6 : 1;
     const trigger = ScrollTrigger.create({
       trigger: sectionRef.current,
       start: "top top",
-      end: `+=${series.length * window.innerHeight}`,
+      end: `+=${series.length * window.innerHeight * multiplier}`,
       pin: true,
       scrub: true,
       onUpdate: (self) => {
@@ -99,22 +76,32 @@ export default function SeriesCatalog() {
     });
 
     return () => trigger.kill();
-  }, []);
+  }, [series.length]);
 
   return (
-    <section ref={sectionRef} className="relative h-[200vh]">
-      <div className="sticky top-0 flex h-screen">
+    <section ref={sectionRef} className="relative h-[150vh]">
+      <div className="sticky top-0 flex h-screen flex-col">
+        <div className="pt-6 md:pt-10 text-center px-4">
+          <p className="text-[10px] md:text-xs uppercase tracking-[0.4em] text-neutral-500 mb-2">— curated for you —</p>
+          <h2 className="text-5xl md:text-[7rem] font-black tracking-tight leading-none">
+            <span className="bg-gradient-to-r from-white via-neutral-300 to-neutral-500 bg-clip-text text-transparent">charms that you</span>
+            <br className="md:hidden" />
+            <span className="bg-gradient-to-r from-white via-neutral-300 to-neutral-500 bg-clip-text text-transparent"> need </span>
+            <span className="text-[#9b111e]">ASAP!</span>
+          </h2>
+        </div>
+        <div className="flex flex-1">
         {/* LEFT */}
-        <div className="w-1/3 flex items-center justify-center border-r border-white/10">
-          <div className="space-y-8">
+        <div className="w-1/4 md:w-1/3 flex items-center justify-center border-r border-white/10 px-2 md:px-0">
+          <div className="space-y-16 md:space-y-8">
             {series.map((item, index) => (
               <h2
                 key={index}
                 onClick={() => changeProduct(index)}
                 className={`cursor-pointer transition-all duration-500 ${
                   activeIndex === index
-                    ? "text-5xl font-bold text-white"
-                    : "text-3xl text-neutral-500 hover:text-white"
+                    ? "text-3xl md:text-5xl font-bold text-white"
+                    : "text-xl md:text-3xl text-neutral-500 hover:text-white"
                 }`}
               >
                 {item.name}
@@ -125,23 +112,24 @@ export default function SeriesCatalog() {
 
         {/* RIGHT */}
         <div className="flex-1 flex items-center justify-center">
-          <div ref={previewRef} className="text-center">
+          <div ref={previewRef} className="text-center transition-all duration-500 ease-out will-change-transform">
             <Image
               src={series[activeIndex].image}
               alt={series[activeIndex].title}
               width={500}
               height={500}
-              className="rounded-3xl object-cover"
+              className="rounded-3xl object-cover w-[200px] md:w-[440px] h-auto"
             />
 
-            <h1 className="mt-8 text-5xl font-bold">
+            <h1 className="mt-3 md:mt-8 text-2xl md:text-5xl font-bold">
               {series[activeIndex].title}
             </h1>
 
-            <p className="mt-4 max-w-md text-neutral-400">
+            <p className="mt-2 md:mt-4 max-w-md text-xs md:text-base text-neutral-400">
               {series[activeIndex].description}
             </p>
           </div>
+        </div>
         </div>
       </div>
     </section>

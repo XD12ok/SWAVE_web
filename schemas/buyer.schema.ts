@@ -1,6 +1,12 @@
 import { Schema } from "mongoose";
 
-export const BuyerSchema = new Schema(
+export interface IBuyer {
+  name: string;
+  email: string;
+  phone: string;
+}
+
+export const BuyerSchema = new Schema<IBuyer>(
   {
     name: {
       type: String,

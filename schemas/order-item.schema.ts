@@ -2,11 +2,23 @@ import { Schema } from "mongoose";
 
 import { ImageSchema } from "./image.schema";
 
-export const OrderItemSchema = new Schema(
+export interface IOrderItem {
+  charmId: string;
+  name: string;
+  image?: {
+    publicId: string;
+    secureUrl: string;
+  };
+  price: number;
+  discount?: number;
+  qty: number;
+  subtotal: number;
+}
+
+export const OrderItemSchema = new Schema<IOrderItem>(
   {
     charmId: {
-      type: Schema.Types.ObjectId,
-      ref: "Charm",
+      type: String,
       required: true,
     },
 

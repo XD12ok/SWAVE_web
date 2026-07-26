@@ -1,6 +1,11 @@
 import { Schema } from "mongoose";
 
-export const ImageSchema = new Schema(
+export interface IImage {
+  publicId: string;
+  secureUrl: string;
+}
+
+export const ImageSchema = new Schema<IImage>(
   {
     publicId: {
       type: String,

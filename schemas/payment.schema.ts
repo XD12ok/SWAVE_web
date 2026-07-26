@@ -4,7 +4,19 @@ import { PaymentStatus } from "@/types/enums";
 
 import { ImageSchema } from "./image.schema";
 
-export const PaymentSchema = new Schema(
+export interface IPayment {
+  method?: string;
+  amount?: number;
+  proofImage?: {
+    publicId: string;
+    secureUrl: string;
+  };
+  status: PaymentStatus;
+  paidAt?: Date;
+  confirmedAt?: Date;
+}
+
+export const PaymentSchema = new Schema<IPayment>(
   {
     method: String,
 

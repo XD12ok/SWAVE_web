@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import "leaflet/dist/leaflet.css";
 import { cn } from "@/lib/utils";
 
+import Navbar from "@/components/ui/Navbar";
 import InitialLoader from "./InitialLoader";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -21,8 +23,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Swave",
-  description: "Portfolio",
+  title: "SWAVE — Italian Charm Bracelets",
+  description:
+    "Premium Italian charm bracelets. Build your own unique bracelet with handcrafted charms.",
 };
 
 export default function RootLayout({
@@ -38,12 +41,12 @@ export default function RootLayout({
         "antialiased",
         geistSans.variable,
         geistMono.variable,
-        "font-mono",
+        "font-coolvetica",
         jetbrainsMono.variable,
       )}
     >
       <body className="min-h-full flex flex-col bg-black">
-        {/* Website */}
+        <Navbar />
         <InitialLoader>{children}</InitialLoader>
       </body>
     </html>
