@@ -4,6 +4,7 @@ import "./globals.css";
 import "leaflet/dist/leaflet.css";
 import { cn } from "@/lib/utils";
 
+import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import Navbar from "@/components/ui/Navbar";
@@ -51,6 +52,7 @@ export default function RootLayout({
         <Navbar />
         <InitialLoader>{children}</InitialLoader>
         <SpeedInsights />
+        <Analytics />
       </body>
     </html>
   );
