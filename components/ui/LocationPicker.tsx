@@ -27,7 +27,7 @@ interface Props {
   defaultCenter?: [number, number];
 }
 
-const DEFAULT_CENTER: [number, number] = [-6.9666, 110.4197]; // Kota Semarang
+const DEFAULT_CENTER: [number, number] = [-7.003139, 110.428778]; // SWAVE Office
 
 function FixLeafletIcon() {
   useEffect(() => {

@@ -29,8 +29,6 @@ type ShippingForm = {
   longitude?: number;
 };
 
-const BASE_SHIPPING_COST = 15000;
-
 function isCategoryObject(
   c: unknown,
 ): c is { _id: string; name: string } {
@@ -117,6 +115,8 @@ export default function CheckoutPage() {
   const [error, setError] = useState("");
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const [shippingCost, setShippingCost] = useState(0);
+  const [shippingDistance, setShippingDistance] = useState<number | null>(null);
 
   const updateBuyer = (field: string, value: string) =>
     setBuyer((prev) => ({ ...prev, [field]: value }));
@@ -125,7 +125,7 @@ export default function CheckoutPage() {
     setShipping((prev) => ({ ...prev, [field]: value }));
 
   const handleLocationSelect = useCallback(
-    (result: { lat: number; lng: number; displayName: string; address: { road?: string; city?: string; town?: string; village?: string; state?: string; postcode?: string } }) => {
+    async (result: { lat: number; lng: number; displayName: string; address: { road?: string; city?: string; town?: string; village?: string; state?: string; postcode?: string } }) => {
       const city = (result.address.city ?? result.address.town ?? "").toLowerCase();
       const state = (result.address.state ?? "").toLowerCase();
       const name = result.displayName.toLowerCase();
@@ -153,6 +153,20 @@ export default function CheckoutPage() {
         latitude: result.lat,
         longitude: result.lng,
       }));
+
+      try {
+        const res = await fetch(
+          `/api/shipping-cost?lat=${result.lat}&lng=${result.lng}`,
+        );
+        if (res.ok) {
+          const data = await res.json();
+          setShippingCost(data.cost);
+          setShippingDistance(data.distanceKm);
+        }
+      } catch {
+        // fallback: keep cost at 0
+      }
+
       setShowLocationPicker(false);
     },
     [],
@@ -219,10 +233,7 @@ export default function CheckoutPage() {
         }
       }
 
-      const shippingCost =
-          shipping.method === ShippingMethod.DELIVERY ? BASE_SHIPPING_COST : 0;
-
-        const orderPayload = {
+      const orderPayload = {
           buyer: {
             name: buyer.name,
             email: buyer.email,
@@ -253,8 +264,8 @@ export default function CheckoutPage() {
             subtotal: charm.price,
           })),
           subtotal: totalPrice,
-          shippingCost,
-          total: totalPrice + shippingCost,
+          shippingCost: shipping.method === ShippingMethod.DELIVERY ? shippingCost : 0,
+          total: totalPrice + (shipping.method === ShippingMethod.DELIVERY ? shippingCost : 0),
         };
 
         const res = await fetch("/api/orders", {
@@ -279,7 +290,7 @@ export default function CheckoutPage() {
         setSubmitting(false);
       }
     },
-    [buyer, shipping, selectedCharms, totalPrice, router],
+    [buyer, shipping, selectedCharms, totalPrice, router, shippingCost],
   );
 
   if (selectedCharms.length === 0) {
@@ -416,6 +427,8 @@ export default function CheckoutPage() {
               onClick={() => {
                 updateShipping("method", ShippingMethod.PICKUP);
                 setLocationError("");
+                setShippingCost(0);
+                setShippingDistance(null);
               }}
               className={`flex-1 px-5 py-4 rounded-xl border text-sm font-medium transition-all ${
                 shipping.method === ShippingMethod.PICKUP
@@ -479,7 +492,11 @@ export default function CheckoutPage() {
               />
               <button
                 type="button"
-                onClick={() => setShowLocationPicker(true)}
+                onClick={() => {
+                setShowLocationPicker(true);
+                setShippingCost(0);
+                setShippingDistance(null);
+              }}
                 className="w-full h-12 rounded-xl border border-dashed border-white/20 text-sm text-neutral-400 hover:text-white hover:border-white/40 transition-colors flex items-center justify-center gap-2"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -546,13 +563,21 @@ export default function CheckoutPage() {
                 {(
                   totalPrice +
                   (shipping.method === ShippingMethod.DELIVERY
-                    ? BASE_SHIPPING_COST
+                    ? shippingCost
                     : 0)
                 ).toLocaleString("id-ID")}
               </p>
-              {shipping.method === ShippingMethod.DELIVERY && (
+              {shipping.method === ShippingMethod.DELIVERY && shippingCost > 0 && (
                 <p className="text-[10px] md:text-xs text-neutral-500">
-                  termasuk ongkir Rp{BASE_SHIPPING_COST.toLocaleString("id-ID")}
+                  ongkir Rp{shippingCost.toLocaleString("id-ID")}
+                  {shippingDistance !== null && (
+                    <span className="text-neutral-600"> ({shippingDistance} km)</span>
+                  )}
+                </p>
+              )}
+              {shipping.method === ShippingMethod.DELIVERY && shippingCost === 0 && shipping.latitude && (
+                <p className="text-[10px] md:text-xs text-neutral-500">
+                  Menghitung ongkir...
                 </p>
               )}
             </div>
