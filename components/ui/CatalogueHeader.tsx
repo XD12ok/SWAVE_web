@@ -9,11 +9,11 @@ import { Charm } from "@/types/charm";
 interface Props {
   selected: Charm[];
   removeCharm: (index: number) => void;
-  categoryCount: number;
+  categoryCount?: number;
   onFilterClick?: () => void;
 }
 
-export default function CatalogueHeader({ selected, removeCharm, categoryCount, onFilterClick }: Props) {
+export default function CatalogueHeader({ selected, removeCharm, onFilterClick }: Props) {
   const totalPrice = useMemo(() => {
     return selected.reduce((sum, c) => sum + c.price, 0);
   }, [selected]);

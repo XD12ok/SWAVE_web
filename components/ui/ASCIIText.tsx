@@ -46,9 +46,9 @@ void main() {
 }
 `;
 
-Math.map = function (n: number, start: number, stop: number, start2: number, stop2: number) {
+function mapRange(n: number, start: number, stop: number, start2: number, stop2: number) {
   return ((n - start) / (stop - start)) * (stop2 - start2) + start2;
-};
+}
 
 const PX_RATIO = typeof window !== "undefined" ? window.devicePixelRatio : 1;
 
@@ -194,7 +194,7 @@ class AsciiFilter {
             continue;
           }
 
-          let gray = (0.3 * r + 0.6 * g + 0.1 * b) / 255;
+          const gray = (0.3 * r + 0.6 * g + 0.1 * b) / 255;
           let idx = Math.floor((1 - gray) * (this.charset.length - 1));
           if (this.invert) idx = this.charset.length - idx - 1;
           str += this.charset[idx];
@@ -440,15 +440,15 @@ class CanvAscii {
     this.textCanvas.render();
     this.texture.needsUpdate = true;
 
-    this.mesh.material.uniforms.uTime.value = Math.sin(time);
+    (this.mesh.material as THREE.ShaderMaterial).uniforms.uTime.value = Math.sin(time);
 
     this.updateRotation();
     this.filter.render(this.scene, this.camera);
   }
 
   updateRotation() {
-    const x = Math.map(this.mouse.y, 0, this.height, 0.5, -0.5);
-    const y = Math.map(this.mouse.x, 0, this.width, -0.5, 0.5);
+    const x = mapRange(this.mouse.y, 0, this.height, 0.5, -0.5);
+    const y = mapRange(this.mouse.x, 0, this.width, -0.5, 0.5);
 
     this.mesh.rotation.x += (x - this.mesh.rotation.x) * 0.05;
     this.mesh.rotation.y += (y - this.mesh.rotation.y) * 0.05;
@@ -456,19 +456,22 @@ class CanvAscii {
 
   clear() {
     this.scene.traverse((obj) => {
-      if (obj.isMesh && typeof obj.material === "object" && obj.material !== null) {
-        Object.keys(obj.material).forEach((key) => {
-          const matProp = (obj.material as Record<string, unknown>)[key];
-          if (
-            matProp !== null &&
-            typeof matProp === "object" &&
-            typeof (matProp as { dispose?: () => void }).dispose === "function"
-          ) {
-            (matProp as { dispose: () => void }).dispose();
-          }
-        });
-        (obj.material as THREE.Material).dispose();
-        (obj as THREE.Mesh).geometry.dispose();
+      if (obj instanceof THREE.Mesh) {
+        const mesh = obj as THREE.Mesh;
+        if (typeof mesh.material === "object" && mesh.material !== null) {
+          Object.keys(mesh.material).forEach((key) => {
+            const matProp = (mesh.material as unknown as Record<string, unknown>)[key];
+            if (
+              matProp !== null &&
+              typeof matProp === "object" &&
+              typeof (matProp as { dispose?: () => void }).dispose === "function"
+            ) {
+              (matProp as { dispose: () => void }).dispose();
+            }
+          });
+          (mesh.material as THREE.Material).dispose();
+          mesh.geometry.dispose();
+        }
       }
     });
     this.scene.clear();

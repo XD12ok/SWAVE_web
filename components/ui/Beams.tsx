@@ -1,4 +1,3 @@
-/* eslint-disable react/no-unknown-property */
 "use client";
 
 import { forwardRef, useImperativeHandle, useEffect, useRef, useMemo } from "react";
@@ -11,14 +10,15 @@ import { degToRad } from "three/src/math/MathUtils.js";
 
 import "./Beams.css";
 
-function extendMaterial(BaseMaterial: typeof THREE.ShaderMaterial, cfg: Record<string, unknown>) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extendMaterial(BaseMaterial: any, cfg: Record<string, unknown>) {
   const physical = THREE.ShaderLib.physical;
   const { vertexShader: baseVert, fragmentShader: baseFrag, uniforms: baseUniforms } = physical;
-  const baseDefines = (physical as Record<string, unknown>).defines ?? {};
+  const baseDefines = (physical as unknown as Record<string, unknown>).defines ?? {};
 
   const uniforms = THREE.UniformsUtils.clone(baseUniforms);
 
-  const defaults = new (BaseMaterial as new (cfg: unknown) => Record<string, unknown>)(cfg.material || {});
+  const defaults = new (BaseMaterial as unknown as new (cfg: unknown) => Record<string, unknown>)(cfg.material || {});
 
   if (defaults.color) uniforms.diffuse.value = defaults.color;
   if ("roughness" in defaults) uniforms.roughness.value = defaults.roughness;
@@ -281,10 +281,10 @@ function createStackedPlanesBufferGeometry(n: number, width: number, height: num
   return geometry;
 }
 
-const MergedPlanes = forwardRef<{ current: THREE.Mesh | null }, { material: THREE.ShaderMaterial; width: number; count: number; height: number }>(
+const MergedPlanes = forwardRef<THREE.Mesh | null, { material: THREE.ShaderMaterial; width: number; count: number; height: number }>(
   ({ material, width, count, height }, ref) => {
     const mesh = useRef<THREE.Mesh>(null);
-    useImperativeHandle(ref, () => mesh.current!);
+    useImperativeHandle(ref, () => mesh.current!, []);
     const geometry = useMemo(
       () => createStackedPlanesBufferGeometry(count, width, height, 0, 100),
       [count, width, height],
@@ -299,7 +299,7 @@ const MergedPlanes = forwardRef<{ current: THREE.Mesh | null }, { material: THRE
 );
 MergedPlanes.displayName = "MergedPlanes";
 
-const PlaneNoise = forwardRef<{ current: THREE.Mesh | null }, { material: THREE.ShaderMaterial; width: number; count: number; height: number }>(
+const PlaneNoise = forwardRef<THREE.Mesh | null, { material: THREE.ShaderMaterial; width: number; count: number; height: number }>(
   (props, ref) => (
     <MergedPlanes ref={ref} material={props.material} width={props.width} count={props.count} height={props.height} />
   ),

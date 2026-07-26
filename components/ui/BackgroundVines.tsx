@@ -6,11 +6,9 @@ import { useEffect, useRef, useState } from "react";
 export default function BackgroundVines() {
   const left = useRef<HTMLDivElement>(null);
   const right = useRef<HTMLDivElement>(null);
-  const [count, setCount] = useState(2);
-
-  useEffect(() => {
-    setCount(window.innerWidth < 768 ? 3 : 2);
-  }, []);
+  const [count] = useState(() =>
+    typeof window !== "undefined" && window.innerWidth < 768 ? 3 : 2
+  );
 
   useEffect(() => {
     let raf = 0;

@@ -26,11 +26,17 @@ function getSheetId() {
   return id;
 }
 
-export async function appendRows(sheetTitle: string, rows: unknown[][]) {
+// JWT type is not directly assignable to googleapis auth parameter
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getService(): ReturnType<typeof google.sheets> {
   const auth = getAuth();
-  const spreadsheetId = getSheetId();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return google.sheets({ version: "v4", auth: auth as any });
+}
 
-  const service = google.sheets({ version: "v4", auth: auth as any });
+export async function appendRows(sheetTitle: string, rows: unknown[][]) {
+  const spreadsheetId = getSheetId();
+  const service = getService();
 
   // Ensure sheet exists, create if not
   const meta = await service.spreadsheets.get({ spreadsheetId });
@@ -53,9 +59,8 @@ export async function appendRows(sheetTitle: string, rows: unknown[][]) {
 }
 
 export async function clearSheet(sheetTitle: string) {
-  const auth = getAuth();
   const spreadsheetId = getSheetId();
-  const service = google.sheets({ version: "v4", auth: auth as any });
+  const service = getService();
 
   await service.spreadsheets.values.clear({
     spreadsheetId,
@@ -64,9 +69,8 @@ export async function clearSheet(sheetTitle: string) {
 }
 
 export async function ensureHeaders(sheetTitle: string, headers: string[]) {
-  const auth = getAuth();
   const spreadsheetId = getSheetId();
-  const service = google.sheets({ version: "v4", auth: auth as any });
+  const service = getService();
 
   const meta = await service.spreadsheets.get({ spreadsheetId });
   const existing = meta.data.sheets?.map((s) => s.properties?.title) ?? [];
@@ -92,9 +96,8 @@ export async function upsertRows(
   rows: unknown[][],
   lookupCol: number,
 ) {
-  const auth = getAuth();
   const spreadsheetId = getSheetId();
-  const service = google.sheets({ version: "v4", auth: auth as any });
+  const service = getService();
 
   const existing = await service.spreadsheets.values.get({
     spreadsheetId,
@@ -130,7 +133,7 @@ export async function upsertRows(
 }
 
 async function appendRowsLocal(
-  service: any,
+  service: ReturnType<typeof google.sheets>,
   spreadsheetId: string,
   sheetTitle: string,
   rows: unknown[][],
