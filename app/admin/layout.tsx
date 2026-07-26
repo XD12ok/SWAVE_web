@@ -100,6 +100,36 @@ export default function AdminLayout({
           >
             Seed Database
           </a>
+          <a
+            href="/api/reset"
+            onClick={async (e) => {
+              e.preventDefault();
+              if (!confirm("Reset DB? Charms & categories will be kept.")) return;
+              try {
+                const res = await fetch("/api/reset", { method: "POST" });
+                const data = await res.json();
+                alert(
+                  res.ok
+                    ? `Reset done: ${JSON.stringify(data.deleted)}`
+                    : `Error: ${data.error}`,
+                );
+                if (res.ok) {
+                  const seedRes = await fetch("/api/seed", { method: "POST" });
+                  const seedData = await seedRes.json();
+                  alert(
+                    seedRes.ok
+                      ? `Re-seeded: ${JSON.stringify(seedData.seeded)}`
+                      : `Seed error: ${seedData.error}`,
+                  );
+                }
+              } catch {
+                alert("Reset failed");
+              }
+            }}
+            className="block w-full text-center px-4 py-2.5 rounded-xl text-sm border border-dashed border-red-500/30 text-red-400/70 hover:text-red-400 hover:border-red-500/50 transition-colors"
+          >
+            Reset DB
+          </a>
         </div>
         <Link
           href="/welcome"
