@@ -4,6 +4,8 @@ import "./globals.css";
 import "leaflet/dist/leaflet.css";
 import { cn } from "@/lib/utils";
 
+import { SpeedInsights } from "@vercel/speed-insights/next";
+
 import Navbar from "@/components/ui/Navbar";
 import InitialLoader from "./InitialLoader";
 
@@ -48,6 +50,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-black">
         <Navbar />
         <InitialLoader>{children}</InitialLoader>
+        <SpeedInsights />
       </body>
     </html>
   );
