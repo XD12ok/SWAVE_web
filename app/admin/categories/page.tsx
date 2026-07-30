@@ -117,7 +117,7 @@ export default function AdminCategories() {
             placeholder="Search categories..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-56"
+            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 flex-1 min-w-0"
           />
           <button
             onClick={() => { resetForm(); setShowForm(true); }}
@@ -171,8 +171,8 @@ export default function AdminCategories() {
           <p className="text-lg">{categories.length === 0 ? "No categories yet" : "No categories match your search"}</p>
         </div>
       ) : (
-        <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-x-auto">
+          <table className="w-full text-sm min-w-[500px]">
             <thead>
               <tr className="border-b border-white/10 text-neutral-500">
                 <th className="text-left px-6 py-4 font-medium">Name</th>

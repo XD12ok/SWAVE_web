@@ -30,6 +30,9 @@ export async function connectDB() {
   if (!cached.promise) {
     cached.promise = mongoose.connect(MONGODB_URI, {
       dbName: "swave",
+      maxIdleTimeMS: 120000,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 60000,
     });
   }
 

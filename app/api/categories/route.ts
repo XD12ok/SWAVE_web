@@ -3,10 +3,14 @@ import { getCategories, createCategory } from "@/services/category.service";
 import { toSlug } from "@/lib/slug";
 import { sanitizeBody } from "@/lib/sanitize";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const categories = await getCategories();
-    return NextResponse.json(categories.length > 0 ? categories : []);
+    return NextResponse.json(categories.length > 0 ? categories : [], {
+      headers: { "Cache-Control": "public, max-age=300, s-maxage=300" },
+    });
   } catch {
     return NextResponse.json([]);
   }

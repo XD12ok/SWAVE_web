@@ -3,10 +3,14 @@ import { getCharms, createCharm } from "@/services/charm.service";
 import { toSlug } from "@/lib/slug";
 import { sanitizeBody } from "@/lib/sanitize";
 
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const charms = await getCharms({ active: undefined });
-    return NextResponse.json(charms);
+    return NextResponse.json(charms, {
+      headers: { "Cache-Control": "public, max-age=120, s-maxage=120" },
+    });
   } catch {
     return NextResponse.json([]);
   }

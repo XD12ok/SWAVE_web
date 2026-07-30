@@ -14,11 +14,12 @@ export default function AdminLayout({
   const [authenticated, setAuthenticated] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-black text-white flex items-center justify-center">
+      <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -29,7 +30,7 @@ export default function AdminLayout({
               setError("Invalid password");
             }
           }}
-          className="flex flex-col items-center gap-6"
+          className="flex flex-col items-center gap-6 w-full max-w-sm"
         >
           <h1 className="text-2xl font-bold tracking-wider">SWAVE Admin</h1>
           <input
@@ -37,7 +38,7 @@ export default function AdminLayout({
             placeholder="Enter admin password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-72 h-12 rounded-xl bg-white/[0.05] border border-white/10 px-5 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30 text-center"
+            className="w-full h-12 rounded-xl bg-white/[0.05] border border-white/10 px-5 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30 text-center"
             autoFocus
           />
           {error && <p className="text-red-400 text-sm">{error}</p>}
@@ -54,28 +55,77 @@ export default function AdminLayout({
 
   return (
     <div className="min-h-screen bg-black text-white flex">
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 border-r border-white/10 min-h-screen p-6 flex flex-col">
-        <Link href="/admin" className="text-xl font-serif tracking-wider text-white/80 hover:text-white mb-10 transition-colors">
-          SWAVE
-        </Link>
+      <aside
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 border-r border-white/10 bg-black min-h-screen p-6 flex flex-col transition-transform md:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex items-center justify-between mb-10">
+          <Link
+            href="/admin"
+            className="text-xl font-serif tracking-wider text-white/80 hover:text-white transition-colors"
+            onClick={() => setSidebarOpen(false)}
+          >
+            SWAVE
+          </Link>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            className="text-neutral-400 hover:text-white md:hidden text-lg"
+            aria-label="Close sidebar"
+          >
+            ✕
+          </button>
+        </div>
         <nav className="space-y-1 flex-1">
-          <SidebarLink href="/admin" active={pathname === "/admin"}>
+          <SidebarLink
+            href="/admin"
+            active={pathname === "/admin"}
+            onClick={() => setSidebarOpen(false)}
+          >
             Overview
           </SidebarLink>
-          <SidebarLink href="/admin/orders" active={pathname.startsWith("/admin/orders")}>
+          <SidebarLink
+            href="/admin/orders"
+            active={pathname.startsWith("/admin/orders")}
+            onClick={() => setSidebarOpen(false)}
+          >
             Orders
           </SidebarLink>
-          <SidebarLink href="/admin/inventory" active={pathname === "/admin/inventory"}>
+          <SidebarLink
+            href="/admin/inventory"
+            active={pathname === "/admin/inventory"}
+            onClick={() => setSidebarOpen(false)}
+          >
             Inventory
           </SidebarLink>
-          <SidebarLink href="/admin/inventory/logs" active={pathname.startsWith("/admin/inventory/logs")}>
+          <SidebarLink
+            href="/admin/inventory/logs"
+            active={pathname.startsWith("/admin/inventory/logs")}
+            onClick={() => setSidebarOpen(false)}
+          >
             Inventory Logs
           </SidebarLink>
-          <SidebarLink href="/admin/charms" active={pathname.startsWith("/admin/charms")}>
+          <SidebarLink
+            href="/admin/charms"
+            active={pathname.startsWith("/admin/charms")}
+            onClick={() => setSidebarOpen(false)}
+          >
             Charms
           </SidebarLink>
-          <SidebarLink href="/admin/categories" active={pathname.startsWith("/admin/categories")}>
+          <SidebarLink
+            href="/admin/categories"
+            active={pathname.startsWith("/admin/categories")}
+            onClick={() => setSidebarOpen(false)}
+          >
             Categories
           </SidebarLink>
         </nav>
@@ -133,14 +183,31 @@ export default function AdminLayout({
         </div>
         <Link
           href="/welcome"
-          className="text-sm text-neutral-500 hover:text-white transition-colors"
+          className="text-sm text-neutral-500 hover:text-white transition-colors mt-4"
         >
           ← Back to Site
         </Link>
       </aside>
 
       {/* Content */}
-      <main className="flex-1 p-8 overflow-auto">{children}</main>
+      <main className="flex-1 min-w-0 p-4 md:p-8 overflow-auto">
+        {/* Mobile top bar */}
+        <div className="flex items-center gap-3 mb-4 md:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="text-neutral-400 hover:text-white text-lg p-1"
+            aria-label="Open sidebar"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+          <span className="text-sm font-medium text-white/60">SWAVE Admin</span>
+        </div>
+        {children}
+      </main>
     </div>
   );
 }
@@ -149,14 +216,17 @@ function SidebarLink({
   href,
   active,
   children,
+  onClick,
 }: {
   href: string;
   active: boolean;
   children: React.ReactNode;
+  onClick?: () => void;
 }) {
   return (
     <Link
       href={href}
+      onClick={onClick}
       className={`block px-4 py-3 rounded-xl text-sm transition-all ${
         active
           ? "bg-white text-black font-medium"

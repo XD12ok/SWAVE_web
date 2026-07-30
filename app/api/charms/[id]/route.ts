@@ -37,7 +37,7 @@ export async function PATCH(
     const body = sanitizeBody(await req.json());
 
     await connectDB();
-    const before = await CharmModel.findById(id).select("stock totalSold").lean();
+    const before = await CharmModel.findById(id).select("stock totalSold reservedStock").lean();
 
     const charm = await updateCharm(id, body);
 
@@ -65,6 +65,18 @@ export async function PATCH(
         change: (body.totalSold ?? 0) - (before.totalSold ?? 0),
         reason: InventoryReason.MANUAL,
         reference: "admin:sold-edit",
+      });
+      void syncInventoryLog(JSON.parse(JSON.stringify(log)));
+    }
+
+    if (before && "reservedStock" in body && body.reservedStock !== before.reservedStock) {
+      const log = await InventoryLogModel.create({
+        charmId: id,
+        before: before.reservedStock ?? 0,
+        after: body.reservedStock,
+        change: (body.reservedStock ?? 0) - (before.reservedStock ?? 0),
+        reason: InventoryReason.MANUAL,
+        reference: "admin:reserved-edit",
       });
       void syncInventoryLog(JSON.parse(JSON.stringify(log)));
     }

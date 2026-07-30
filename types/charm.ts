@@ -5,6 +5,7 @@ export interface Charm {
   price: number;
   image: string;
   stock?: number;
+  reservedStock?: number;
   limited?: boolean;
   discount?: {
     enabled: boolean;

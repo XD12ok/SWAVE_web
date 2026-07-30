@@ -22,6 +22,8 @@ export default function AdminInventory() {
 
   const [editing, setEditing] = useState<string | null>(null);
   const [editStock, setEditStock] = useState(0);
+  const [editReserved, setEditReserved] = useState(0);
+  const [editAvailable, setEditAvailable] = useState(0);
   const [editSold, setEditSold] = useState(0);
   const [saving, setSaving] = useState(false);
 
@@ -56,11 +58,28 @@ export default function AdminInventory() {
   const startEdit = (item: CharmStock) => {
     setEditing(item._id);
     setEditStock(item.stock);
+    setEditReserved(item.reservedStock);
+    setEditAvailable(item.available);
     setEditSold(item.totalSold);
   };
 
   const cancelEdit = () => {
     setEditing(null);
+  };
+
+  const handleEditStock = (val: number) => {
+    setEditStock(val);
+    setEditAvailable(val - editReserved);
+  };
+
+  const handleEditReserved = (val: number) => {
+    setEditReserved(val);
+    setEditAvailable(editStock - val);
+  };
+
+  const handleEditAvailable = (val: number) => {
+    setEditAvailable(val);
+    setEditStock(val + editReserved);
   };
 
   const saveEdit = async (id: string) => {
@@ -71,6 +90,7 @@ export default function AdminInventory() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           stock: editStock,
+          reservedStock: editReserved,
           totalSold: editSold,
         }),
       });
@@ -107,7 +127,7 @@ export default function AdminInventory() {
             placeholder="Search charms..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-64"
+            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 flex-1 min-w-0"
           />
         </div>
         <div className="text-center py-24 text-neutral-500">
@@ -125,12 +145,12 @@ export default function AdminInventory() {
           placeholder="Search charms..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-64"
+          className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-full md:w-64"
         />
       </div>
 
-      <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-x-auto">
+        <table className="w-full text-sm min-w-[500px]">
           <thead>
             <tr className="border-b border-white/10 text-neutral-500">
               <th className="text-left px-6 py-4 font-medium">Charm</th>
@@ -172,7 +192,7 @@ export default function AdminInventory() {
                       <input
                         type="number"
                         value={editStock}
-                        onChange={(e) => setEditStock(Number(e.target.value))}
+                        onChange={(e) => handleEditStock(Number(e.target.value))}
                         className="w-20 h-8 rounded-lg bg-white/[0.08] border border-white/20 px-2 text-right text-sm outline-none focus:border-white/40"
                         min={0}
                       />
@@ -182,21 +202,41 @@ export default function AdminInventory() {
                   </td>
 
                   <td className="px-6 py-4 text-right font-mono text-amber-400">
-                    {item.reservedStock}
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        value={editReserved}
+                        onChange={(e) => handleEditReserved(Number(e.target.value))}
+                        className="w-20 h-8 rounded-lg bg-white/[0.08] border border-white/20 px-2 text-right text-sm outline-none focus:border-white/40"
+                        min={0}
+                      />
+                    ) : (
+                      item.reservedStock
+                    )}
                   </td>
 
                   <td className="px-6 py-4 text-right font-mono">
-                    <span
-                      className={
-                        item.outOfStock
-                          ? "text-red-400"
-                          : item.lowStock
-                            ? "text-amber-400"
-                            : "text-green-400"
-                      }
-                    >
-                      {item.available}
-                    </span>
+                    {isEditing ? (
+                      <input
+                        type="number"
+                        value={editAvailable}
+                        onChange={(e) => handleEditAvailable(Number(e.target.value))}
+                        className="w-20 h-8 rounded-lg bg-white/[0.08] border border-white/20 px-2 text-right text-sm outline-none focus:border-white/40"
+                        min={0}
+                      />
+                    ) : (
+                      <span
+                        className={
+                          item.outOfStock
+                            ? "text-red-400"
+                            : item.lowStock
+                              ? "text-amber-400"
+                              : "text-green-400"
+                        }
+                      >
+                        {item.available}
+                      </span>
+                    )}
                   </td>
 
                   <td className="px-6 py-4 text-right font-mono">

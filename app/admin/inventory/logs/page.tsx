@@ -47,13 +47,13 @@ export default function InventoryLogsPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <h1 className="text-2xl font-bold">Inventory Logs</h1>
         <input
           placeholder="Filter by Charm ID"
           value={charmFilter}
           onChange={(e) => setCharmFilter(e.target.value)}
-          className="h-10 w-64 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30"
+          className="h-10 w-full md:w-64 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30"
         />
       </div>
 
@@ -66,8 +66,8 @@ export default function InventoryLogsPage() {
           <p className="text-lg">No inventory logs yet</p>
         </div>
       ) : (
-        <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-white/10 text-neutral-500">
                 <th className="text-left px-6 py-4 font-medium">Charm</th>

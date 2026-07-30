@@ -48,7 +48,7 @@ function CountdownBadge({ endAt }: { endAt: string }) {
 }
 
 export default function CharmCard({ charm, onSelect }: Props) {
-  const available = charm.stock ?? 0;
+  const available = (charm.stock ?? 0) - (charm.reservedStock ?? 0);
   const outOfStock = available <= 0;
   const lowStock = available > 0 && available <= 5;
   const disc = discountedPrice(charm);

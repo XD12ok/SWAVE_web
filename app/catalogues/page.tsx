@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Charm } from "@/types/charm";
 import CatalogueHeader from "@/components/ui/CatalogueHeader";
 import CategorySidebar from "@/components/ui/CategorySidebar";
 import CharmGrid from "@/components/ui/CharmGrid";
+import SkeletonGrid from "@/components/ui/SkeletonGrid";
 import { showToast } from "@/components/ui/Toast";
 
 function isCategoryObject(
@@ -30,6 +31,7 @@ function toCatalogCharm(raw: Record<string, unknown>): Charm {
     price: raw.price as number,
     image,
     stock: (raw.stock as number) ?? 0,
+    reservedStock: (raw.reservedStock as number) ?? 0,
     limited: (raw.limited as boolean) ?? false,
     discount: raw.discount as { enabled: boolean; value: number; startAt?: string; endAt?: string } | undefined,
   };
@@ -53,43 +55,48 @@ export default function CataloguesPage() {
   const [charms, setCharms] = useState<Charm[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadingSlow, setLoadingSlow] = useState(false);
+  const loadTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   useEffect(() => {
+    loadTimer.current = setTimeout(() => setLoadingSlow(true), 4000);
+
     let cancelled = false;
     (async () => {
-      const [cRes, catRes] = await Promise.all([
-        fetch("/api/charms"),
-        fetch("/api/categories"),
-      ]);
+      try {
+        const res = await fetch("/api/catalog");
+        if (cancelled) return;
 
-      if (cancelled) return;
+        if (res.ok) {
+          const { charms: rawCharms, categories: rawCats } = await res.json();
 
-      if (cRes.ok) {
-        const data = await cRes.json();
-        const rawList: Record<string, unknown>[] = Array.isArray(data)
-          ? data
-          : [];
-        const mapped = rawList.length > 0 ? rawList.map(toCatalogCharm) : [];
-        setCharms(mapped);
-      }
+          const rawList: Record<string, unknown>[] = Array.isArray(rawCharms)
+            ? rawCharms
+            : [];
+          const mapped =
+            rawList.length > 0 ? rawList.map(toCatalogCharm) : [];
+          setCharms(mapped);
 
-      if (catRes.ok) {
-        const data = await catRes.json();
-        if (Array.isArray(data)) {
-          let names: string[];
-          if (data.length > 0 && typeof data[0] === "object") {
-            names = (data as { name: string }[]).map((c) => c.name);
-          } else {
-            names = data as string[];
+          if (Array.isArray(rawCats)) {
+            let names: string[];
+            if (rawCats.length > 0 && typeof rawCats[0] === "object") {
+              names = (rawCats as { name: string }[]).map((c) => c.name);
+            } else {
+              names = rawCats as string[];
+            }
+            setCategories(["All", ...names.filter((n) => n !== "All")]);
           }
-          setCategories(["All", ...names.filter((n) => n !== "All")]);
         }
+      } catch {
+        // silent
       }
 
+      clearTimeout(loadTimer.current);
       setLoaded(true);
     })();
     return () => {
       cancelled = true;
+      clearTimeout(loadTimer.current);
     };
   }, []);
 
@@ -99,7 +106,8 @@ export default function CataloguesPage() {
 
   function addCharm(charm: Charm) {
     const count = selected.filter((c) => c.id === charm.id).length;
-    if (count >= (charm.stock ?? 0)) {
+    const available = (charm.stock ?? 0) - (charm.reservedStock ?? 0);
+    if (count >= available) {
       showToast("Stock tidak memadai!");
       return;
     }
@@ -149,7 +157,7 @@ export default function CataloguesPage() {
         onFilterClick={() => setSidebarOpen((o) => !o)}
       />
 
-      <div className="flex pt-[60px] md:pt-[110px]">
+      <div className={`flex ${selected.length > 0 ? "pt-[180px]" : "pt-[60px]"} md:pt-[110px]`}>
         <CategorySidebar
           categories={categories}
           activeCategory={activeCategory}
@@ -177,9 +185,13 @@ export default function CataloguesPage() {
           </div>
 
           {!loaded ? (
-            <div className="flex items-center justify-center py-24">
-              <div className="h-8 w-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            </div>
+            <SkeletonGrid
+              wakeMessage={
+                loadingSlow
+                  ? "Memulai database, harap tunggu sebentar..."
+                  : undefined
+              }
+            />
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-24 text-neutral-500">
               <p className="text-lg">No charms found</p>

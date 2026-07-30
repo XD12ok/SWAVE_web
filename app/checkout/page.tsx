@@ -97,20 +97,36 @@ export default function CheckoutPage() {
     return selectedCharms.reduce((s, { charm }) => s + charm.price, 0);
   }, [selectedCharms]);
 
-  const [buyer, setBuyer] = useState({ name: "", email: "", phone: "" });
-  const [shipping, setShipping] = useState<ShippingForm>({
-    method: ShippingMethod.DELIVERY,
-    receiverName: "",
-    phone: "",
-    province: "",
-    regency: "",
-    district: "",
-    village: "",
-    address: "",
-    postalCode: "",
-    note: "",
-    pickupDate: "",
-  });
+  const CHECKOUT_KEY = "swave-checkout-form";
+
+  const loadSaved = <T,>(key: string, fallback: T): T => {
+    if (typeof window === "undefined") return fallback;
+    try {
+      const raw = localStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const [buyer, setBuyer] = useState(() =>
+    loadSaved(`${CHECKOUT_KEY}-buyer`, { name: "", email: "", phone: "" }),
+  );
+  const [shipping, setShipping] = useState<ShippingForm>(() =>
+    loadSaved(`${CHECKOUT_KEY}-shipping`, {
+      method: ShippingMethod.DELIVERY,
+      receiverName: "",
+      phone: "",
+      province: "",
+      regency: "",
+      district: "",
+      village: "",
+      address: "",
+      postalCode: "",
+      note: "",
+      pickupDate: "",
+    }),
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [showLocationPicker, setShowLocationPicker] = useState(false);
@@ -123,6 +139,14 @@ export default function CheckoutPage() {
 
   const updateShipping = (field: string, value: string) =>
     setShipping((prev) => ({ ...prev, [field]: value }));
+
+  useEffect(() => {
+    localStorage.setItem(`${CHECKOUT_KEY}-buyer`, JSON.stringify(buyer));
+  }, [buyer]);
+
+  useEffect(() => {
+    localStorage.setItem(`${CHECKOUT_KEY}-shipping`, JSON.stringify(shipping));
+  }, [shipping]);
 
   const handleLocationSelect = useCallback(
     async (result: { lat: number; lng: number; displayName: string; address: { road?: string; city?: string; town?: string; village?: string; state?: string; postcode?: string } }) => {
@@ -281,6 +305,8 @@ export default function CheckoutPage() {
 
         const order = await res.json();
         localStorage.removeItem("bracelet-selection");
+        localStorage.removeItem(`${CHECKOUT_KEY}-buyer`);
+        localStorage.removeItem(`${CHECKOUT_KEY}-shipping`);
         router.push(`/payment?orderId=${order._id}`);
       } catch (err) {
         setError(
@@ -622,7 +648,7 @@ function Input({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       required={required}
-      className="w-full h-12 rounded-xl bg-white/[0.05] border border-white/10 px-5 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30 transition-colors"
+      className={`w-full h-12 rounded-xl bg-white/[0.05] border border-white/10 px-5 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30 transition-colors ${type === "date" ? "[color-scheme:dark]" : ""}`}
     />
   );
 }

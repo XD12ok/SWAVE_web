@@ -80,7 +80,7 @@ export default function AdminOrders() {
             placeholder="Search by invoice or buyer..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-64"
+            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-full min-w-0"
           />
           <select
             value={statusFilter}
@@ -109,8 +109,8 @@ export default function AdminOrders() {
           <p className="text-lg">{orders.length === 0 ? "No orders found" : "No orders match your search"}</p>
         </div>
       ) : (
-        <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-white/10 text-neutral-500">
                 <th className="text-left px-6 py-4 font-medium">Invoice</th>

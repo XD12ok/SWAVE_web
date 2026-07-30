@@ -105,6 +105,22 @@ export default function PaymentPage() {
     [order, orderId, paymentMethod, paymentProof],
   );
 
+  const cancelOrder = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      await fetch(`/api/orders/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "CANCELLED" }),
+      });
+    } catch {
+      // silent
+    }
+    window.location.href = "/catalogues";
+  }, [orderId]);
+
+  const qrisRequiresProof = paymentMethod === "QRIS" && !paymentProof;
+
   if (loading) {
     return (
       <main className="min-h-screen bg-[#0b0b0b] text-white flex items-center justify-center">
@@ -188,9 +204,9 @@ export default function PaymentPage() {
   return (
     <main className="min-h-screen bg-[#0b0b0b] text-white">
       <div className="fixed top-0 left-0 right-0 h-16 bg-[#0b0b0b]/90 backdrop-blur border-b border-white/10 z-50 flex items-center justify-between px-4 md:px-10">
-        <Link href="/catalogues" className="text-sm text-neutral-400 hover:text-white transition-colors">
+        <button onClick={cancelOrder} className="text-sm text-neutral-400 hover:text-white transition-colors">
           ← Back
-        </Link>
+        </button>
         <span className="text-sm text-neutral-400">Payment</span>
         <div className="w-12" />
       </div>
@@ -287,16 +303,16 @@ export default function PaymentPage() {
               <p className="text-sm text-neutral-400">Scan QRIS to pay</p>
               <div className="flex justify-center">
                 <Image
-                  src="/qris.svg"
+                  src="/qris.png"
                   alt="QRIS"
-                  width={200}
-                  height={200}
+                  width={400}
+                  height={400}
                   className="rounded-xl"
                 />
               </div>
               <div>
                 <label className="block text-sm text-neutral-400 mb-2">
-                  Upload Payment Proof
+                  Upload Payment Proof <span className="text-red-400">*</span>
                 </label>
                 <input
                   type="file"
@@ -304,6 +320,9 @@ export default function PaymentPage() {
                   onChange={(e) => setPaymentProof(e.target.files?.[0] ?? null)}
                   className="w-full text-sm text-neutral-400 file:mr-4 file:py-2.5 file:px-5 file:rounded-full file:border-0 file:text-sm file:font-medium file:bg-white file:text-black file:cursor-pointer hover:file:bg-white/90 cursor-pointer"
                 />
+                {!paymentProof && (
+                  <p className="text-xs text-amber-400/70 mt-1">Wajib upload bukti pembayaran QRIS sebelum lanjut</p>
+                )}
               </div>
             </div>
           )}
@@ -325,15 +344,15 @@ export default function PaymentPage() {
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={submitting || qrisRequiresProof}
           className="w-full py-4 rounded-full bg-white text-black text-sm font-medium hover:bg-white/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {submitting
             ? uploading
               ? "Uploading..."
               : "Submitting..."
-            : (paymentMethod === "TRANSFER" || paymentMethod === "QRIS") && !paymentProof
-              ? "Pay Later (Upload Proof Later)"
+            : qrisRequiresProof
+              ? "Upload Bukti Pembayaran Terlebih Dahulu"
               : "Submit Payment"}
         </button>
       </form>
