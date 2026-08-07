@@ -82,6 +82,10 @@ export default function AdminCharms() {
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [showNewCategory, setShowNewCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [creatingCategory, setCreatingCategory] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -117,6 +121,8 @@ export default function AdminCharms() {
     setForm({ ...INITIAL_FORM });
     setEditing(null);
     setShowForm(false);
+    setShowNewCategory(false);
+    setNewCategoryName("");
   };
 
   const openEdit = (charm: Charm) => {
@@ -212,6 +218,36 @@ export default function AdminCharms() {
       setUploading(false);
     }
     return null;
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    setCreatingCategory(true);
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const cat = await res.json();
+        setCategories((prev) => [
+          ...prev.filter((c) => c._id !== cat._id),
+          { _id: cat._id, name: cat.name },
+        ]);
+        setForm((f) => ({ ...f, category: cat._id }));
+        setShowNewCategory(false);
+        setNewCategoryName("");
+      } else {
+        const err = await res.json();
+        alert(err.error || "Failed to create category");
+      }
+    } catch {
+      alert("Failed to create category");
+    } finally {
+      setCreatingCategory(false);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -370,7 +406,11 @@ export default function AdminCharms() {
           <Field label="Category" help="Which collection this charm belongs to">
             <select
               value={form.category}
-              onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+              onChange={(e) => {
+                const v = e.target.value;
+                setShowNewCategory(v === "__new__");
+                setForm((f) => ({ ...f, category: v === "__new__" ? "" : v }));
+              }}
               className="w-full h-11 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none focus:border-white/30 text-neutral-300"
             >
               <option value="">Select a category</option>
@@ -379,7 +419,44 @@ export default function AdminCharms() {
                   {cat.name}
                 </option>
               ))}
+              <option value="__new__" className="bg-neutral-900">
+                + Buat kategori baru...
+              </option>
             </select>
+            {showNewCategory && (
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  placeholder="Nama kategori baru"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void handleCreateCategory();
+                    }
+                  }}
+                  className="flex-1 h-10 rounded-xl bg-white/[0.05] border border-white/10 px-3 text-sm outline-none focus:border-white/30"
+                />
+                <button
+                  type="button"
+                  onClick={() => void handleCreateCategory()}
+                  disabled={creatingCategory || !newCategoryName.trim()}
+                  className="px-4 h-10 rounded-xl bg-white text-black text-sm font-medium hover:bg-white/90 transition-colors disabled:opacity-40"
+                >
+                  {creatingCategory ? "..." : "Buat"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewCategory(false);
+                    setNewCategoryName("");
+                  }}
+                  className="px-3 h-10 rounded-xl border border-white/20 text-sm text-neutral-400 hover:text-white transition-colors"
+                >
+                  Batal
+                </button>
+              </div>
+            )}
           </Field>
 
           {/* Description */}
