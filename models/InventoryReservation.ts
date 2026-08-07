@@ -57,6 +57,8 @@ const InventoryReservationSchema = new Schema<IInventoryReservation>(
 // EXPIRED consistently. A TTL auto-delete would skip both steps.
 InventoryReservationSchema.index({ expiresAt: 1 });
 
+InventoryReservationSchema.index({ status: 1, expiresAt: 1 });
+
 InventoryReservationSchema.index({ orderId: 1, status: 1 });
 
 export default createModel<IInventoryReservation>(

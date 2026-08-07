@@ -121,4 +121,6 @@ const CharmSchema = new Schema<ICharm>(
   },
 );
 
+CharmSchema.index({ name: 1 });
+
 export default createModel<ICharm>("Charm", CharmSchema);

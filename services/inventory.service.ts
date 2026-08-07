@@ -137,6 +137,10 @@ export async function reserveStock(
     reservations.push(reservation);
   }
 
+  if (reservations.length > 0) {
+    publish(EventChannels.CHARM_UPDATED, { reason: "order-reserved" });
+  }
+
   return reservations;
 }
 

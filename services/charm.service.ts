@@ -2,8 +2,18 @@ import { connectDB } from "@/lib/mongodb";
 import CharmModel from "@/models/Charm";
 import { ICharm } from "@/models/Charm";
 import { syncCharm } from "@/lib/sync-sheets";
-import { EventChannels, publish } from "@/lib/events";
+import { EventChannels, publish, subscribe } from "@/lib/events";
+import { getOrCompute, invalidateCache } from "@/lib/cache";
 import { runReservationExpiryIfNeeded } from "./inventory.service";
+
+const CHARMS_CACHE_KEY = "charms";
+const CHARMS_CACHE_TTL_MS = 10000;
+
+// In-process cache invalidation: any charm edit or stock mutation publishes
+// CHARM_UPDATED, which clears the cached list so the next read is fresh.
+subscribe(EventChannels.CHARM_UPDATED, () =>
+  invalidateCache(CHARMS_CACHE_KEY),
+);
 
 export async function getCharms(filters?: {
   category?: string;
@@ -11,27 +21,34 @@ export async function getCharms(filters?: {
 }) {
   await connectDB();
 
-  await runReservationExpiryIfNeeded();
+  const cacheKey = `${CHARMS_CACHE_KEY}:${JSON.stringify(filters ?? {})}`;
 
-  await CharmModel.updateMany(
-    {
-      "discount.enabled": true,
-      "discount.endAt": { $lte: new Date() },
-    },
-    { $set: { "discount.enabled": false } },
-  );
+  return getOrCompute(cacheKey, CHARMS_CACHE_TTL_MS, async () => {
+    await runReservationExpiryIfNeeded();
 
-  const query: Record<string, unknown> = {};
+    await CharmModel.updateMany(
+      {
+        "discount.enabled": true,
+        "discount.endAt": { $lte: new Date() },
+      },
+      { $set: { "discount.enabled": false } },
+    );
 
-  if (filters?.category) {
-    query.category = filters.category;
-  }
+    const query: Record<string, unknown> = {};
 
-  if (filters?.active !== undefined) {
-    query.active = filters.active;
-  }
+    if (filters?.category) {
+      query.category = filters.category;
+    }
 
-  return CharmModel.find(query).populate("category").sort({ name: 1 }).lean();
+    if (filters?.active !== undefined) {
+      query.active = filters.active;
+    }
+
+    return CharmModel.find(query)
+      .populate("category")
+      .sort({ name: 1 })
+      .lean();
+  });
 }
 
 export async function getCharmById(id: string) {
