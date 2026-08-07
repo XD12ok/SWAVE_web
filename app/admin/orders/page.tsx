@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { OrderStatus } from "@/types/enums";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface Order {
   _id: string;
@@ -13,6 +15,9 @@ interface Order {
   total: number;
   createdAt: string;
   payment: { status: string };
+  source?: string;
+  cashierName?: string;
+  shipping?: { method?: string };
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -41,45 +46,90 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    async function load() {
-      try {
-        const url = statusFilter
-          ? `/api/orders?status=${statusFilter}`
-          : "/api/orders";
-        const res = await fetch(url);
-        const data = await res.json();
-        setOrders(data.orders || []);
-      } catch (err) {
-        console.error("Failed to load orders:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [statusFilter]);
+    const timer = setTimeout(() => setSearchQuery(searchInput), 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
-  const filteredOrders = orders.filter((o) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
-    return (
-      o.invoiceNumber.toLowerCase().includes(q) ||
-      o.buyer.name.toLowerCase().includes(q) ||
-      o.buyer.email.toLowerCase().includes(q)
-    );
-  });
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (statusFilter) params.set("status", statusFilter);
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      const url = params.toString() ? `/api/orders?${params}` : "/api/orders";
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+      setOrders(data.orders || []);
+    } catch (err) {
+      console.error("Failed to load orders:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [statusFilter, searchQuery]);
+
+  useEffect(() => {
+    (async () => {
+      await load();
+    })();
+  }, [load]);
+
+  const silentReload = useCallback(() => {
+    void load({ silent: true });
+  }, [load]);
+
+  useRealtime(
+    [EventChannels.ORDER_UPDATED],
+    {
+      intervalMs: 10000,
+      onEvent: silentReload,
+      onPoll: silentReload,
+    },
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <h1 className="text-2xl font-bold">Orders</h1>
         <div className="flex gap-3">
+          <button
+            onClick={handleRefresh}
+            aria-label="Refresh"
+            title="Refresh"
+            className="h-10 w-10 shrink-0 rounded-full border border-white/20 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/40 transition-colors"
+          >
+            {refreshing ? (
+              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+              </svg>
+            )}
+          </button>
           <input
-            placeholder="Search by invoice or buyer..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search buyer name, invoice or email..."
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
             className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-full min-w-0"
           />
           <select
@@ -104,9 +154,9 @@ export default function AdminOrders() {
         <div className="flex items-center justify-center h-64">
           <div className="h-8 w-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
         </div>
-      ) : filteredOrders.length === 0 ? (
+      ) : orders.length === 0 ? (
         <div className="text-center py-24 text-neutral-500">
-          <p className="text-lg">{orders.length === 0 ? "No orders found" : "No orders match your search"}</p>
+          <p className="text-lg">{searchQuery || statusFilter ? "No orders match your search" : "No orders found"}</p>
         </div>
       ) : (
         <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-x-auto">
@@ -123,7 +173,7 @@ export default function AdminOrders() {
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.map((order) => (
+              {orders.map((order) => (
                 <tr
                   key={order._id}
                   className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
@@ -136,6 +186,25 @@ export default function AdminOrders() {
                     <p className="text-xs text-neutral-500">
                       {order.buyer.email}
                     </p>
+                    <span
+                      className={`inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                        order.source === "CASHIER" ||
+                        order.buyer.email === "walkin@swave.local"
+                          ? "bg-purple-500/15 text-purple-400"
+                          : "bg-blue-500/15 text-blue-400"
+                      }`}
+                    >
+                      {order.source === "CASHIER" ||
+                      order.buyer.email === "walkin@swave.local"
+                        ? order.cashierName
+                          ? `Kasir · ${order.cashierName}`
+                          : "Kasir"
+                        : `Online · ${
+                            order.shipping?.method === "DELIVERY"
+                              ? "Delivery"
+                              : "Pickup"
+                          }`}
+                    </span>
                   </td>
                   <td className="px-6 py-4">
                     <span

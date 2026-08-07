@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import BraceletPreview from "./BracletPreview";
 import { Charm } from "@/types/charm";
+import { getDiscountedPrice } from "@/lib/discount";
 
 interface Props {
   selected: Charm[];
@@ -15,7 +16,10 @@ interface Props {
 
 export default function CatalogueHeader({ selected, removeCharm, onFilterClick }: Props) {
   const totalPrice = useMemo(() => {
-    return selected.reduce((sum, c) => sum + c.price, 0);
+    return selected.reduce(
+      (sum, c) => sum + getDiscountedPrice(c.price, c.discount),
+      0,
+    );
   }, [selected]);
 
   return (

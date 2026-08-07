@@ -8,9 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const categories = await getCategories();
-    return NextResponse.json(categories.length > 0 ? categories : [], {
-      headers: { "Cache-Control": "public, max-age=300, s-maxage=300" },
-    });
+    return NextResponse.json(categories.length > 0 ? categories : []);
   } catch {
     return NextResponse.json([]);
   }

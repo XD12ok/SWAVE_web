@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { OrderStatus } from "@/types/enums";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface Stats {
   totalOrders: number;
@@ -15,13 +17,16 @@ interface Stats {
 export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const allOrders = await fetch("/api/orders?limit=1000").then((r) =>
-          r.json(),
-        );
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    try {
+      const allOrders = await fetch("/api/orders?limit=1000", {
+        cache: "no-store",
+      }).then((r) =>
+        r.json(),
+      );
         const orders: Array<{
           status: string;
           total: number;
@@ -62,9 +67,32 @@ export default function AdminDashboard() {
       } finally {
         setLoading(false);
       }
-    }
-    load();
   }, []);
+
+  useEffect(() => {
+    (async () => {
+      await load();
+    })();
+  }, [load]);
+
+  const silentReload = useCallback(() => {
+    void load({ silent: true });
+  }, [load]);
+
+  useRealtime(
+    [EventChannels.ORDER_UPDATED],
+    {
+      intervalMs: 10000,
+      onEvent: silentReload,
+      onPoll: silentReload,
+    },
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   if (loading) {
     return (
@@ -88,7 +116,33 @@ export default function AdminDashboard() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-8">Dashboard Overview</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+        <h1 className="text-2xl font-bold">Dashboard Overview</h1>
+        <button
+          onClick={handleRefresh}
+          aria-label="Refresh"
+          title="Refresh"
+          className="h-10 w-10 shrink-0 rounded-full border border-white/20 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/40 transition-colors self-start"
+        >
+          {refreshing ? (
+            <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : (
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+              <polyline points="21 3 21 9 15 9" />
+            </svg>
+          )}
+        </button>
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
         {cards.map((card) => (
           <div

@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface OrderData {
   _id: string;
@@ -46,6 +48,37 @@ export default function PaymentPage() {
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [orderId]);
+
+  const refreshOrder = useCallback(async () => {
+    if (!orderId) return;
+    try {
+      const res = await fetch(`/api/orders/${orderId}/payment`);
+      if (!res.ok) throw new Error("Order not found");
+      const data = await res.json();
+      setOrder(data);
+      if (
+        data?.status === "CANCELLED" ||
+        data?.status === "EXPIRED"
+      ) {
+        setError("Order telah dibatalkan atau kadaluarsa");
+      }
+    } catch {
+      // keep current state
+    }
+  }, [orderId]);
+
+  useRealtime(
+    [
+      EventChannels.ORDER_UPDATED,
+      EventChannels.orderStatus(String(orderId ?? "")),
+      EventChannels.orderPayment(String(orderId ?? "")),
+    ],
+    {
+      intervalMs: 30000,
+      onEvent: () => void refreshOrder(),
+      onPoll: () => void refreshOrder(),
+    },
+  );
 
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -179,6 +212,16 @@ export default function PaymentPage() {
           {paymentMethod === "CASH" && (
             <p>Pay in cash when picking up your order.</p>
           )}
+        </div>
+        <div className="w-full max-w-sm px-6 py-4 rounded-xl border border-white/10 bg-white/[0.03] text-sm text-center space-y-1">
+          <p className="text-neutral-400 uppercase tracking-widest text-[10px]">
+            Estimasi Selesai
+          </p>
+          <p className="text-white font-medium">
+            {order.shipping.method === "DELIVERY"
+              ? "±1–2 jam setelah pembayaran dikonfirmasi (area Kota Semarang)"
+              : "±30 menit setelah pembayaran dikonfirmasi (ambil di booth)"}
+          </p>
         </div>
         <div className="px-6 py-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-bold text-center">
           PLS TAKE SCREENSHOOT THIS INVOICE

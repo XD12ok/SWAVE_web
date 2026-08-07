@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface LogEntry {
   _id: string;
@@ -25,36 +27,85 @@ export default function InventoryLogsPage() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [charmFilter, setCharmFilter] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
+    try {
+      const url = charmFilter
+        ? `/api/inventory/logs?charmId=${charmFilter}`
+        : "/api/inventory/logs";
+      const res = await fetch(url, { cache: "no-store" });
+      const data = await res.json();
+      setLogs(data.logs || []);
+    } catch (err) {
+      console.error("Failed to load inventory logs:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [charmFilter]);
 
   useEffect(() => {
-    async function load() {
-      setLoading(true);
-      try {
-        const url = charmFilter
-          ? `/api/inventory/logs?charmId=${charmFilter}`
-          : "/api/inventory/logs";
-        const res = await fetch(url);
-        const data = await res.json();
-        setLogs(data.logs || []);
-      } catch (err) {
-        console.error("Failed to load inventory logs:", err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    load();
-  }, [charmFilter]);
+    (async () => {
+      await load();
+    })();
+  }, [load]);
+
+  const silentReload = useCallback(() => {
+    void load({ silent: true });
+  }, [load]);
+
+  useRealtime(
+    [EventChannels.CHARM_UPDATED],
+    {
+      intervalMs: 10000,
+      onEvent: silentReload,
+      onPoll: silentReload,
+    },
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   return (
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <h1 className="text-2xl font-bold">Inventory Logs</h1>
-        <input
-          placeholder="Filter by Charm ID"
-          value={charmFilter}
-          onChange={(e) => setCharmFilter(e.target.value)}
-          className="h-10 w-full md:w-64 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30"
-        />
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={handleRefresh}
+            aria-label="Refresh"
+            title="Refresh"
+            className="h-10 w-10 shrink-0 rounded-full border border-white/20 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/40 transition-colors"
+          >
+            {refreshing ? (
+              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+              </svg>
+            )}
+          </button>
+          <input
+            placeholder="Filter by Charm ID"
+            value={charmFilter}
+            onChange={(e) => setCharmFilter(e.target.value)}
+            className="h-10 w-full md:w-64 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none placeholder:text-neutral-500 focus:border-white/30"
+          />
+        </div>
       </div>
 
       {loading ? (

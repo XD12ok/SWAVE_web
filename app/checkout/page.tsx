@@ -7,6 +7,7 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Charm } from "@/types/charm";
 import { ShippingMethod } from "@/types/enums";
+import { getDiscountedPrice } from "@/lib/discount";
 
 const LocationPicker = dynamic(
   () => import("@/components/ui/LocationPicker"),
@@ -70,7 +71,7 @@ export default function CheckoutPage() {
   const [charmsLoaded, setCharmsLoaded] = useState(false);
 
   useEffect(() => {
-    fetch("/api/charms")
+    fetch("/api/charms", { cache: "no-store" })
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -94,7 +95,10 @@ export default function CheckoutPage() {
   }, [charms, selectedIds]);
 
   const totalPrice = useMemo(() => {
-    return selectedCharms.reduce((s, { charm }) => s + charm.price, 0);
+    return selectedCharms.reduce(
+      (s, { charm }) => s + getDiscountedPrice(charm.price, charm.discount),
+      0,
+    );
   }, [selectedCharms]);
 
   const CHECKOUT_KEY = "swave-checkout-form";
@@ -280,13 +284,16 @@ export default function CheckoutPage() {
             latitude: shipping.latitude,
             longitude: shipping.longitude,
           },
-          items: selectedCharms.map(({ charm }) => ({
-            charmId: charm.id,
-            name: charm.name,
-            price: charm.price,
-            qty: 1,
-            subtotal: charm.price,
-          })),
+          items: selectedCharms.map(({ charm }) => {
+            const price = getDiscountedPrice(charm.price, charm.discount);
+            return {
+              charmId: charm.id,
+              name: charm.name,
+              price,
+              qty: 1,
+              subtotal: price,
+            };
+          }),
           subtotal: totalPrice,
           shippingCost: shipping.method === ShippingMethod.DELIVERY ? shippingCost : 0,
           total: totalPrice + (shipping.method === ShippingMethod.DELIVERY ? shippingCost : 0),
@@ -362,11 +369,12 @@ export default function CheckoutPage() {
             {Object.values(selectedCharms.reduce(
               (acc, { charm }) => {
                 const key = String(charm.id);
+                const unitPrice = getDiscountedPrice(charm.price, charm.discount);
                 if (acc[key]) {
                   acc[key].qty++;
-                  acc[key].subtotal += charm.price;
+                  acc[key].subtotal += unitPrice;
                 } else {
-                  acc[key] = { charm, qty: 1, subtotal: charm.price };
+                  acc[key] = { charm, qty: 1, subtotal: unitPrice };
                 }
                 return acc;
               },
@@ -388,7 +396,7 @@ export default function CheckoutPage() {
                 <span className="flex-1 text-neutral-300 text-xs md:text-sm truncate">{charm.name}</span>
                 <div className="text-right">
                   <span className="text-neutral-500 text-[10px] md:text-xs block">
-                    Rp{charm.price.toLocaleString("id-ID")} × {qty}
+                    Rp{getDiscountedPrice(charm.price, charm.discount).toLocaleString("id-ID")} × {qty}
                   </span>
                   <span className="text-neutral-400 text-xs md:text-sm">
                     Rp{subtotal.toLocaleString("id-ID")}

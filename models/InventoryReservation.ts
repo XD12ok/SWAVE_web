@@ -52,7 +52,10 @@ const InventoryReservationSchema = new Schema<IInventoryReservation>(
   },
 );
 
-InventoryReservationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// NOTE: no TTL index on expiresAt. Expiry is handled by `expireReservations`
+// so reserved stock is atomically released AND the linked order is marked
+// EXPIRED consistently. A TTL auto-delete would skip both steps.
+InventoryReservationSchema.index({ expiresAt: 1 });
 
 InventoryReservationSchema.index({ orderId: 1, status: 1 });
 

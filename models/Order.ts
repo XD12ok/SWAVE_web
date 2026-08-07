@@ -18,6 +18,8 @@ export interface IOrder extends BaseDocument {
   shippingCost: number;
   total: number;
   note?: string;
+  source?: "ONLINE" | "CASHIER";
+  cashierName?: string;
 }
 
 const OrderSchema = new Schema<IOrder>(
@@ -70,6 +72,14 @@ const OrderSchema = new Schema<IOrder>(
     },
 
     note: String,
+
+    source: {
+      type: String,
+      enum: ["ONLINE", "CASHIER"],
+      default: "ONLINE",
+    },
+
+    cashierName: String,
   },
   {
     timestamps: true,

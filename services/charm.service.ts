@@ -2,12 +2,16 @@ import { connectDB } from "@/lib/mongodb";
 import CharmModel from "@/models/Charm";
 import { ICharm } from "@/models/Charm";
 import { syncCharm } from "@/lib/sync-sheets";
+import { EventChannels, publish } from "@/lib/events";
+import { runReservationExpiryIfNeeded } from "./inventory.service";
 
 export async function getCharms(filters?: {
   category?: string;
   active?: boolean;
 }) {
   await connectDB();
+
+  await runReservationExpiryIfNeeded();
 
   await CharmModel.updateMany(
     {
@@ -44,13 +48,17 @@ export async function createCharm(data: Partial<ICharm>) {
   await connectDB();
   const charm = await CharmModel.create(data);
   void syncCharm(JSON.parse(JSON.stringify(charm)));
+  publish(EventChannels.CHARM_UPDATED, { reason: "charm-created" });
   return charm;
 }
 
 export async function updateCharm(id: string, data: Partial<ICharm>) {
   await connectDB();
   const charm = await CharmModel.findByIdAndUpdate(id, { $set: data }, { new: true, runValidators: true }).lean();
-  if (charm) void syncCharm(JSON.parse(JSON.stringify(charm)));
+  if (charm) {
+    void syncCharm(JSON.parse(JSON.stringify(charm)));
+    publish(EventChannels.CHARM_UPDATED, { reason: "charm-updated" });
+  }
   return charm;
 }
 
@@ -59,6 +67,7 @@ export async function deleteCharm(id: string) {
   const charm = await CharmModel.findByIdAndDelete(id).lean();
   if (charm) {
     void syncCharm({ ...JSON.parse(JSON.stringify(charm)), _deleted: true });
+    publish(EventChannels.CHARM_UPDATED, { reason: "charm-deleted" });
   }
   return charm;
 }

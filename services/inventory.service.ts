@@ -1,15 +1,82 @@
 import { connectDB } from "@/lib/mongodb";
 import CharmModel from "@/models/Charm";
+import OrderModel from "@/models/Order";
 import InventoryLogModel from "@/models/InventoryLog";
 import InventoryReservationModel from "@/models/InventoryReservation";
-import { InventoryReason, ReservationStatus } from "@/types/enums";
+import { InventoryReason, OrderStatus, ReservationStatus } from "@/types/enums";
 import { Types } from "mongoose";
-import { syncInventoryLog } from "@/lib/sync-sheets";
+import { syncInventoryLog, syncOrder } from "@/lib/sync-sheets";
+import { EventChannels, publish } from "@/lib/events";
+import { ICharm } from "@/models/Charm";
 
 const RESERVATION_TTL_MS = 30 * 60 * 1000;
 
+export type StockDeductMode =
+  | "reserve"
+  | "release"
+  | "consume"
+  | "consume-reserved";
+
+/**
+ * Single atomic gate for ALL stock movements.
+ * Every branch uses findOneAndUpdate + $expr so concurrent requests can never
+ * oversell: if the guard condition fails, the update matches nothing and we
+ * return null.
+ */
+export async function deductStockAtomic(
+  charmId: string | Types.ObjectId,
+  qty: number,
+  mode: StockDeductMode,
+): Promise<ICharm | null> {
+  await connectDB();
+
+  const where: Record<string, unknown> = { _id: charmId };
+  let update: Record<string, unknown>;
+
+  switch (mode) {
+    case "reserve":
+      // online order: hold units without removing physical stock
+      where.$expr = { $gte: [{ $subtract: ["$stock", "$reservedStock"] }, qty] };
+      update = { $inc: { reservedStock: qty } };
+      break;
+    case "release":
+      where.$expr = { $gte: ["$reservedStock", qty] };
+      update = { $inc: { reservedStock: -qty } };
+      break;
+    case "consume-reserved":
+      // fulfill a previously reserved unit (paid online order)
+      where.$expr = {
+        $and: [{ $gte: ["$stock", qty] }, { $gte: ["$reservedStock", qty] }],
+      };
+      update = { $inc: { stock: -qty, reservedStock: -qty, totalSold: qty } };
+      break;
+    case "consume":
+    default:
+      // direct sale (kasir): must not touch units reserved by online orders
+      where.$expr = { $gte: [{ $subtract: ["$stock", "$reservedStock"] }, qty] };
+      update = { $inc: { stock: -qty, totalSold: qty } };
+      break;
+  }
+
+  const charm = await CharmModel.findOneAndUpdate(where, update, { new: true });
+
+  return charm ? ((charm as unknown) as ICharm) : null;
+}
+
+export async function runReservationExpiryIfNeeded() {
+  await connectDB();
+  const hasExpired = await InventoryReservationModel.exists({
+    status: ReservationStatus.ACTIVE,
+    expiresAt: { $lte: new Date() },
+  });
+  if (hasExpired) {
+    await expireReservations();
+  }
+}
+
 export async function checkAvailability(items: { charmId: string; qty: number }[]) {
   await connectDB();
+  await runReservationExpiryIfNeeded();
 
   const results: Array<{ charmId: string; name: string; available: number; enough: boolean }> = [];
 
@@ -37,18 +104,12 @@ export async function reserveStock(
   items: { charmId: string; qty: number }[],
 ) {
   await connectDB();
+  await runReservationExpiryIfNeeded();
 
   const reservations = [];
 
   for (const item of items) {
-    const charm = await CharmModel.findOneAndUpdate(
-      {
-        _id: item.charmId,
-        $expr: { $gte: [{ $subtract: ["$stock", "$reservedStock"] }, item.qty] },
-      },
-      { $inc: { reservedStock: item.qty } },
-      { new: true },
-    );
+    const charm = await deductStockAtomic(item.charmId, item.qty, "reserve");
 
     if (!charm) {
       await releaseReservations(orderId.toString());
@@ -57,8 +118,8 @@ export async function reserveStock(
 
     const log = await InventoryLogModel.create({
       charmId: item.charmId,
-      before: charm.stock - charm.reservedStock + item.qty,
-      after: charm.stock - charm.reservedStock,
+      before: (charm.stock ?? 0) - (charm.reservedStock ?? 0) + item.qty,
+      after: (charm.stock ?? 0) - (charm.reservedStock ?? 0),
       change: -item.qty,
       reason: InventoryReason.ORDER,
       reference: `reserve:${orderId}`,
@@ -84,33 +145,94 @@ export async function consumeReservations(orderId: string) {
 
   const reservations = await InventoryReservationModel.find({
     orderId,
-    status: ReservationStatus.ACTIVE,
+    status: {
+      $in: [
+        ReservationStatus.ACTIVE,
+        ReservationStatus.EXPIRED,
+        ReservationStatus.RELEASED,
+      ],
+    },
   });
 
-  for (const reservation of reservations) {
-    const charm = await CharmModel.findById(reservation.charmId);
-
-    if (charm) {
-      const beforeStock = charm.stock;
-
-      charm.stock = Math.max(0, charm.stock - reservation.qty);
-      charm.reservedStock = Math.max(0, charm.reservedStock - reservation.qty);
-      charm.totalSold = (charm.totalSold ?? 0) + reservation.qty;
-      await charm.save();
-
-      const log = await InventoryLogModel.create({
-        charmId: reservation.charmId,
-        before: beforeStock,
-        after: charm.stock,
-        change: -reservation.qty,
-        reason: InventoryReason.ORDER,
-        reference: orderId,
-      });
-      void syncInventoryLog(JSON.parse(JSON.stringify(log)));
+  // Safety net: if this order has NO reservation documents at all (e.g. a legacy
+  // TTL index already deleted them), rebuild the consumption from the order's
+  // items so a paid order still decrements physical stock exactly once.
+  // CONSUMED documents exist for already-paid orders, so this never runs twice.
+  const hasAnyReservation = await InventoryReservationModel.exists({ orderId });
+  if (!hasAnyReservation) {
+    const order = await OrderModel.findById(orderId).select("items").lean();
+    if (order && order.items.length > 0) {
+      for (const item of order.items) {
+        const charm = await deductStockAtomic(
+          String(item.charmId),
+          item.qty,
+          "consume-reserved",
+        );
+        if (!charm) {
+          throw new Error(
+            `Stok tidak cukup untuk memproses pembayaran order ${orderId}`,
+          );
+        }
+        const log = await InventoryLogModel.create({
+          charmId: item.charmId,
+          before: (charm.stock ?? 0) + item.qty,
+          after: charm.stock ?? 0,
+          change: -item.qty,
+          reason: InventoryReason.ORDER,
+          reference: orderId,
+        });
+        void syncInventoryLog(JSON.parse(JSON.stringify(log)));
+      }
     }
+    publish(EventChannels.CHARM_UPDATED, { reason: "order-paid" });
+    return;
+  }
+
+  for (const reservation of reservations) {
+    const wasReleased = reservation.status !== ReservationStatus.ACTIVE;
+
+    // pay-after-expired: reservation was released, re-reserve atomically or fail
+    if (wasReleased) {
+      const reserved = await deductStockAtomic(
+        reservation.charmId,
+        reservation.qty,
+        "reserve",
+      );
+      if (!reserved) {
+        throw new Error(
+          `Stok tidak cukup untuk memproses pembayaran order ${orderId}`,
+        );
+      }
+    }
+
+    const charm = await deductStockAtomic(
+      reservation.charmId,
+      reservation.qty,
+      "consume-reserved",
+    );
+
+    if (!charm) {
+      throw new Error(
+        `Reservasi tidak dapat diproses untuk charm ${reservation.charmId}`,
+      );
+    }
+
+    const log = await InventoryLogModel.create({
+      charmId: reservation.charmId,
+      before: (charm.stock ?? 0) + reservation.qty,
+      after: charm.stock ?? 0,
+      change: -reservation.qty,
+      reason: InventoryReason.ORDER,
+      reference: orderId,
+    });
+    void syncInventoryLog(JSON.parse(JSON.stringify(log)));
 
     reservation.status = ReservationStatus.CONSUMED;
     await reservation.save();
+  }
+
+  if (reservations.length > 0) {
+    publish(EventChannels.CHARM_UPDATED, { reason: "order-paid" });
   }
 }
 
@@ -123,16 +245,13 @@ export async function releaseReservations(orderId: string) {
   });
 
   for (const reservation of reservations) {
-    const charm = await CharmModel.findById(reservation.charmId);
+    const charm = await deductStockAtomic(reservation.charmId, reservation.qty, "release");
 
     if (charm) {
-      charm.reservedStock = Math.max(0, charm.reservedStock - reservation.qty);
-      await charm.save();
-
       const log = await InventoryLogModel.create({
         charmId: reservation.charmId,
-        before: charm.reservedStock + reservation.qty,
-        after: charm.reservedStock,
+        before: (charm.reservedStock ?? 0) + reservation.qty,
+        after: charm.reservedStock ?? 0,
         change: reservation.qty,
         reason: InventoryReason.ORDER,
         reference: `release:${orderId}`,
@@ -142,6 +261,10 @@ export async function releaseReservations(orderId: string) {
 
     reservation.status = ReservationStatus.RELEASED;
     await reservation.save();
+  }
+
+  if (reservations.length > 0) {
+    publish(EventChannels.CHARM_UPDATED, { reason: "order-released" });
   }
 }
 
@@ -153,19 +276,56 @@ export async function expireReservations() {
     expiresAt: { $lte: new Date() },
   });
 
+  const orderIds = new Set<string>();
+  const affectedCharmIds = new Set<string>();
   let released = 0;
 
   for (const reservation of expired) {
-    const charm = await CharmModel.findById(reservation.charmId);
+    const charm = await deductStockAtomic(reservation.charmId, reservation.qty, "release");
 
     if (charm) {
-      charm.reservedStock = Math.max(0, charm.reservedStock - reservation.qty);
-      await charm.save();
+      const log = await InventoryLogModel.create({
+        charmId: reservation.charmId,
+        before: (charm.reservedStock ?? 0) + reservation.qty,
+        after: charm.reservedStock ?? 0,
+        change: reservation.qty,
+        reason: InventoryReason.EXPIRED,
+        reference: `expire:${reservation.orderId}`,
+      });
+      void syncInventoryLog(JSON.parse(JSON.stringify(log)));
     }
 
     reservation.status = ReservationStatus.EXPIRED;
     await reservation.save();
     released++;
+
+    orderIds.add(String(reservation.orderId));
+    affectedCharmIds.add(String(reservation.charmId));
+  }
+
+  for (const orderId of orderIds) {
+    const order = await OrderModel.findOneAndUpdate(
+      { _id: orderId, status: OrderStatus.PENDING_PAYMENT },
+      { status: OrderStatus.EXPIRED },
+      { new: true },
+    ).lean();
+
+    if (order) {
+      void syncOrder(JSON.parse(JSON.stringify(order)));
+      publish(EventChannels.orderStatus(orderId), {
+        orderId,
+        status: OrderStatus.EXPIRED,
+        previousStatus: OrderStatus.PENDING_PAYMENT,
+      });
+      publish(EventChannels.ORDER_UPDATED, {
+        orderId,
+        status: OrderStatus.EXPIRED,
+      });
+    }
+  }
+
+  if (affectedCharmIds.size > 0) {
+    publish(EventChannels.CHARM_UPDATED, { reason: "reservation-expired" });
   }
 
   return released;
@@ -173,6 +333,7 @@ export async function expireReservations() {
 
 export async function getCharmStock(charmId: string) {
   await connectDB();
+  await runReservationExpiryIfNeeded();
 
   const charm = await CharmModel.findById(charmId).select("name stock reservedStock").lean();
 
@@ -189,6 +350,7 @@ export async function getCharmStock(charmId: string) {
 
 export async function getAllCharmStock() {
   await connectDB();
+  await runReservationExpiryIfNeeded();
 
   const charms = await CharmModel.find({})
     .select("name stock reservedStock totalSold slug active")

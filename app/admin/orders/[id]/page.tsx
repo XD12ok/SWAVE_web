@@ -4,6 +4,8 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
 import { OrderStatus, PaymentStatus, ShippingMethod } from "@/types/enums";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface Order {
   _id: string;
@@ -45,6 +47,8 @@ interface Order {
   shippingCost: number;
   total: number;
   notes?: string;
+  source?: string;
+  cashierName?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -78,21 +82,37 @@ export default function OrderDetailPage() {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const res = await fetch(`/api/orders/${params.id}`);
-        if (!res.ok) throw new Error("Not found");
-        const data = await res.json();
-        setOrder(data);
-      } catch {
-        router.push("/admin/orders");
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/orders/${params.id}`);
+      if (!res.ok) throw new Error("Not found");
+      const data = await res.json();
+      setOrder(data);
+    } catch {
+      router.push("/admin/orders");
+    } finally {
+      setLoading(false);
     }
-    load();
   }, [params.id, router]);
+
+  useEffect(() => {
+    (async () => {
+      await load();
+    })();
+  }, [load]);
+
+  useRealtime(
+    [
+      EventChannels.ORDER_UPDATED,
+      EventChannels.orderStatus(String(params.id)),
+      EventChannels.orderPayment(String(params.id)),
+    ],
+    {
+      intervalMs: 10000,
+      onEvent: () => void load(),
+      onPoll: () => void load(),
+    },
+  );
 
   const updateStatus = useCallback(
     async (newStatus: OrderStatus) => {
@@ -185,6 +205,18 @@ export default function OrderDetailPage() {
           <Row label="Name" value={order.buyer.name} />
           <Row label="Email" value={order.buyer.email} />
           <Row label="Phone" value={order.buyer.phone} />
+          <Row
+            label="Source"
+            value={
+              order.source === "CASHIER"
+                ? `Kasir${order.cashierName ? ` · ${order.cashierName}` : ""}`
+                : `Online · ${
+                    order.shipping.method === ShippingMethod.DELIVERY
+                      ? "Delivery"
+                      : "Pickup"
+                  }`
+            }
+          />
         </div>
       </section>
 

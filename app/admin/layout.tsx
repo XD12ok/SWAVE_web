@@ -1,10 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 const ADMIN_PASSWORD = "swave123";
+const ALERTS_SEEN_KEY = "swave-admin-alerts-seen";
+
+interface AlertOrder {
+  _id: string;
+  invoiceNumber: string;
+  buyerName: string;
+  status: string;
+  total: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export default function AdminLayout({
   children,
@@ -16,6 +29,58 @@ export default function AdminLayout({
   const [error, setError] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+
+  const [alerts, setAlerts] = useState<{
+    newOrders: AlertOrder[];
+    overdueOrders: AlertOrder[];
+  }>({ newOrders: [], overdueOrders: [] });
+  const [alertsOpen, setAlertsOpen] = useState(false);
+  const [seenAt, setSeenAt] = useState<number>(() => {
+    if (typeof window === "undefined") return 0;
+    return Number(localStorage.getItem(ALERTS_SEEN_KEY)) || 0;
+  });
+
+  const fetchAlerts = useCallback(async () => {
+    if (!authenticated) return;
+    try {
+      const res = await fetch("/api/admin/alerts", { cache: "no-store" });
+      if (res.ok) {
+        const data = await res.json();
+        setAlerts({
+          newOrders: Array.isArray(data.newOrders) ? data.newOrders : [],
+          overdueOrders: Array.isArray(data.overdueOrders)
+            ? data.overdueOrders
+            : [],
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }, [authenticated]);
+
+  useEffect(() => {
+    if (!authenticated) return;
+    (async () => {
+      await fetchAlerts();
+    })();
+  }, [authenticated, fetchAlerts]);
+
+  useRealtime([EventChannels.ORDER_CREATED, EventChannels.ORDER_UPDATED], {
+    intervalMs: 15000,
+    onEvent: () => void fetchAlerts(),
+    onPoll: () => void fetchAlerts(),
+  });
+
+  const markSeen = () => {
+    const now = Date.now();
+    setSeenAt(now);
+    localStorage.setItem(ALERTS_SEEN_KEY, String(now));
+  };
+
+  const unseenNew = alerts.newOrders.filter(
+    (o) => new Date(o.createdAt).getTime() > seenAt,
+  ).length;
+  const badgeCount = unseenNew + alerts.overdueOrders.length;
 
   if (!authenticated) {
     return (
@@ -101,6 +166,13 @@ export default function AdminLayout({
             Orders
           </SidebarLink>
           <SidebarLink
+            href="/admin/kasir"
+            active={pathname.startsWith("/admin/kasir")}
+            onClick={() => setSidebarOpen(false)}
+          >
+            Kasir
+          </SidebarLink>
+          <SidebarLink
             href="/admin/inventory"
             active={pathname === "/admin/inventory"}
             onClick={() => setSidebarOpen(false)}
@@ -129,6 +201,17 @@ export default function AdminLayout({
             Categories
           </SidebarLink>
         </nav>
+        <div className="mb-4">
+          <NotificationBell
+            alerts={alerts}
+            badgeCount={badgeCount}
+            open={alertsOpen}
+            onToggle={() => setAlertsOpen((o) => !o)}
+            onClose={() => setAlertsOpen(false)}
+            onMarkSeen={markSeen}
+            align="left"
+          />
+        </div>
         <div className="space-y-2">
           <a
             href="/api/seed"
@@ -205,6 +288,17 @@ export default function AdminLayout({
             </svg>
           </button>
           <span className="text-sm font-medium text-white/60">SWAVE Admin</span>
+          <div className="ml-auto">
+            <NotificationBell
+              alerts={alerts}
+              badgeCount={badgeCount}
+              open={alertsOpen}
+              onToggle={() => setAlertsOpen((o) => !o)}
+              onClose={() => setAlertsOpen(false)}
+              onMarkSeen={markSeen}
+              align="right"
+            />
+          </div>
         </div>
         {children}
       </main>
@@ -235,5 +329,135 @@ function SidebarLink({
     >
       {children}
     </Link>
+  );
+}
+
+function NotificationBell({
+  alerts,
+  badgeCount,
+  open,
+  onToggle,
+  onClose,
+  onMarkSeen,
+  align,
+}: {
+  alerts: { newOrders: AlertOrder[]; overdueOrders: AlertOrder[] };
+  badgeCount: number;
+  open: boolean;
+  onToggle: () => void;
+  onClose: () => void;
+  onMarkSeen: () => void;
+  align: "left" | "right";
+}) {
+  const empty = alerts.newOrders.length === 0 && alerts.overdueOrders.length === 0;
+
+  return (
+    <div className="relative">
+      <button
+        onClick={onToggle}
+        aria-label="Notifications"
+        className="relative flex items-center justify-center w-11 h-11 rounded-xl border border-white/10 bg-white/[0.03] text-neutral-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {badgeCount > 0 && (
+          <span className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1 rounded-full bg-red-500 text-white text-[11px] font-bold flex items-center justify-center">
+            {badgeCount > 99 ? "99+" : badgeCount}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className={`absolute mt-2 w-80 max-h-[70vh] overflow-auto rounded-xl border border-white/10 bg-neutral-900 shadow-2xl p-3 space-y-4 z-50 ${
+            align === "right" ? "right-0" : "left-0"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-wider text-white/70">
+              Notifikasi
+            </p>
+            <button
+              onClick={onMarkSeen}
+              className="text-[11px] text-neutral-400 hover:text-white transition-colors"
+            >
+              Tandai dibaca
+            </button>
+          </div>
+
+          {empty && (
+            <p className="text-sm text-neutral-500 py-4 text-center">
+              Tidak ada notifikasi
+            </p>
+          )}
+
+          {alerts.newOrders.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-amber-400 mb-1.5">
+                Pesanan Baru ({alerts.newOrders.length})
+              </p>
+              <div className="space-y-1">
+                {alerts.newOrders.map((o) => (
+                  <Link
+                    key={o._id}
+                    href={`/admin/orders/${o._id}`}
+                    onClick={onClose}
+                    className="block px-3 py-2 rounded-lg bg-white/[0.04] border border-white/5 hover:bg-white/[0.08] transition-colors"
+                  >
+                    <p className="text-xs font-mono text-white">
+                      {o.invoiceNumber}
+                    </p>
+                    <p className="text-[11px] text-neutral-400">
+                      {o.buyerName} · Rp{o.total.toLocaleString("id-ID")} ·{" "}
+                      {new Date(o.createdAt).toLocaleString("id-ID")}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {alerts.overdueOrders.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-widest text-red-400 mb-1.5">
+                Belum Diproses &gt; 4 Hari ({alerts.overdueOrders.length})
+              </p>
+              <div className="space-y-1">
+                {alerts.overdueOrders.map((o) => (
+                  <Link
+                    key={o._id}
+                    href={`/admin/orders/${o._id}`}
+                    onClick={onClose}
+                    className="block px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 transition-colors"
+                  >
+                    <p className="text-xs font-mono text-white">
+                      {o.invoiceNumber}
+                    </p>
+                    <p className="text-[11px] text-neutral-400">
+                      {o.buyerName} · Rp{o.total.toLocaleString("id-ID")}
+                    </p>
+                    <p className="text-[10px] text-red-400">
+                      Diproses terakhir{" "}
+                      {new Date(o.updatedAt).toLocaleString("id-ID")}
+                    </p>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

@@ -8,9 +8,7 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   try {
     const charms = await getCharms({ active: undefined });
-    return NextResponse.json(charms, {
-      headers: { "Cache-Control": "public, max-age=120, s-maxage=120" },
-    });
+    return NextResponse.json(charms);
   } catch {
     return NextResponse.json([]);
   }
@@ -33,6 +31,8 @@ export async function POST(req: NextRequest) {
       weight: body.weight ?? 0,
       description: body.description ?? "",
       image: body.image ?? { publicId: "", secureUrl: "" },
+      discount: body.discount ?? { enabled: false, type: "PERCENTAGE", value: 0 },
+      limited: body.limited ?? false,
       active: body.active ?? true,
     });
 

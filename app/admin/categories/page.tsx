@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { toSlug } from "@/lib/slug";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface Category {
   _id: string;
@@ -18,13 +20,14 @@ export default function AdminCategories() {
   const [editing, setEditing] = useState<Category | null>(null);
   const [name, setName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const res = await fetch("/api/categories");
+        const res = await fetch("/api/categories", { cache: "no-store" });
         if (!cancelled && res.ok) {
           const data = await res.json();
           setCategories(Array.isArray(data) ? data : []);
@@ -46,7 +49,7 @@ export default function AdminCategories() {
 
   const reload = async () => {
     try {
-      const res = await fetch("/api/categories");
+      const res = await fetch("/api/categories", { cache: "no-store" });
       if (res.ok) {
         const data = await res.json();
         setCategories(Array.isArray(data) ? data : []);
@@ -55,6 +58,21 @@ export default function AdminCategories() {
       // ignore
     }
   };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
+  };
+
+  useRealtime(
+    [EventChannels.CATEGORY_UPDATED, EventChannels.CHARM_UPDATED],
+    {
+      intervalMs: 10000,
+      onEvent: () => void reload(),
+      onPoll: () => void reload(),
+    },
+  );
 
   const openEdit = (cat: Category) => {
     setName(cat.name);
@@ -105,7 +123,7 @@ export default function AdminCategories() {
   const filteredCategories = categories.filter((cat) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
-    return cat.name.toLowerCase().includes(q) || cat.slug.toLowerCase().includes(q);
+    return cat.name.toLowerCase().includes(q);
   });
 
   return (
@@ -113,6 +131,30 @@ export default function AdminCategories() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <h1 className="text-2xl font-bold">Categories</h1>
         <div className="flex gap-3">
+          <button
+            onClick={handleRefresh}
+            aria-label="Refresh"
+            title="Refresh"
+            className="h-10 w-10 shrink-0 rounded-full border border-white/20 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/40 transition-colors"
+          >
+            {refreshing ? (
+              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+              </svg>
+            )}
+          </button>
           <input
             placeholder="Search categories..."
             value={searchQuery}
@@ -176,7 +218,6 @@ export default function AdminCategories() {
             <thead>
               <tr className="border-b border-white/10 text-neutral-500">
                 <th className="text-left px-6 py-4 font-medium">Name</th>
-                <th className="text-left px-6 py-4 font-medium">Slug</th>
                 <th className="text-center px-6 py-4 font-medium">Active</th>
                 <th className="px-6 py-4" />
               </tr>
@@ -185,7 +226,6 @@ export default function AdminCategories() {
               {filteredCategories.map((cat) => (
                 <tr key={cat._id} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
                   <td className="px-6 py-4">{cat.name}</td>
-                  <td className="px-6 py-4 text-neutral-400 font-mono text-xs">{cat.slug}</td>
                   <td className="px-6 py-4 text-center">
                     <span className={cat.active ? "text-green-400" : "text-neutral-500"}>
                       {cat.active ? "Yes" : "No"}

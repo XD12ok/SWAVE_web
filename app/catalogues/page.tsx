@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Charm } from "@/types/charm";
 import CatalogueHeader from "@/components/ui/CatalogueHeader";
 import CategorySidebar from "@/components/ui/CategorySidebar";
 import CharmGrid from "@/components/ui/CharmGrid";
 import SkeletonGrid from "@/components/ui/SkeletonGrid";
 import { showToast } from "@/components/ui/Toast";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 function isCategoryObject(
   c: unknown,
@@ -58,39 +60,42 @@ export default function CataloguesPage() {
   const [loadingSlow, setLoadingSlow] = useState(false);
   const loadTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
+  const loadCatalog = useCallback(async () => {
+    try {
+      const res = await fetch("/api/catalog", { cache: "no-store" });
+
+      if (res.ok) {
+        const { charms: rawCharms, categories: rawCats } = await res.json();
+
+        const rawList: Record<string, unknown>[] = Array.isArray(rawCharms)
+          ? rawCharms
+          : [];
+        const mapped =
+          rawList.length > 0 ? rawList.map(toCatalogCharm) : [];
+        setCharms(mapped);
+
+        if (Array.isArray(rawCats)) {
+          let names: string[];
+          if (rawCats.length > 0 && typeof rawCats[0] === "object") {
+            names = (rawCats as { name: string }[]).map((c) => c.name);
+          } else {
+            names = rawCats as string[];
+          }
+          setCategories(["All", ...names.filter((n) => n !== "All")]);
+        }
+      }
+    } catch {
+      // silent
+    }
+  }, []);
+
   useEffect(() => {
     loadTimer.current = setTimeout(() => setLoadingSlow(true), 4000);
 
     let cancelled = false;
     (async () => {
-      try {
-        const res = await fetch("/api/catalog");
-        if (cancelled) return;
-
-        if (res.ok) {
-          const { charms: rawCharms, categories: rawCats } = await res.json();
-
-          const rawList: Record<string, unknown>[] = Array.isArray(rawCharms)
-            ? rawCharms
-            : [];
-          const mapped =
-            rawList.length > 0 ? rawList.map(toCatalogCharm) : [];
-          setCharms(mapped);
-
-          if (Array.isArray(rawCats)) {
-            let names: string[];
-            if (rawCats.length > 0 && typeof rawCats[0] === "object") {
-              names = (rawCats as { name: string }[]).map((c) => c.name);
-            } else {
-              names = rawCats as string[];
-            }
-            setCategories(["All", ...names.filter((n) => n !== "All")]);
-          }
-        }
-      } catch {
-        // silent
-      }
-
+      await loadCatalog();
+      if (cancelled) return;
       clearTimeout(loadTimer.current);
       setLoaded(true);
     })();
@@ -98,7 +103,13 @@ export default function CataloguesPage() {
       cancelled = true;
       clearTimeout(loadTimer.current);
     };
-  }, []);
+  }, [loadCatalog]);
+
+  useRealtime([EventChannels.CHARM_UPDATED], {
+    intervalMs: 5000,
+    onEvent: () => void loadCatalog(),
+    onPoll: () => void loadCatalog(),
+  });
 
   useEffect(() => {
     localStorage.setItem("bracelet-selection", JSON.stringify(selected));

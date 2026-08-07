@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import { toSlug } from "@/lib/slug";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface CharmDiscount {
   enabled: boolean;
@@ -34,15 +36,15 @@ interface FormState {
   name: string;
   category: string;
   description: string;
-  price: number;
-  stock: number;
-  weight: number;
+  price: string;
+  stock: string;
+  weight: string;
   imageFile: File | null;
   imagePreview: string;
   imagePublicId: string;
   imageSecureUrl: string;
   discountEnabled: boolean;
-  discountValue: number;
+  discountValue: string;
   discountStartAt: string;
   discountEndAt: string;
   limited: boolean;
@@ -53,15 +55,15 @@ const INITIAL_FORM: FormState = {
   name: "",
   category: "",
   description: "",
-  price: 0,
-  stock: 0,
-  weight: 10,
+  price: "",
+  stock: "",
+  weight: "10",
   imageFile: null,
   imagePreview: "",
   imagePublicId: "",
   imageSecureUrl: "",
   discountEnabled: false,
-  discountValue: 0,
+  discountValue: "",
   discountStartAt: "",
   discountEndAt: "",
   limited: false,
@@ -77,6 +79,7 @@ export default function AdminCharms() {
   const [editing, setEditing] = useState<Charm | null>(null);
   const [form, setForm] = useState<FormState>({ ...INITIAL_FORM });
   const [uploading, setUploading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
@@ -85,8 +88,8 @@ export default function AdminCharms() {
       setLoading(true);
       try {
         const [cRes, catRes] = await Promise.all([
-          fetch("/api/charms"),
-          fetch("/api/categories"),
+          fetch("/api/charms", { cache: "no-store" }),
+          fetch("/api/categories", { cache: "no-store" }),
         ]);
         if (!cancelled) {
           if (cRes.ok) setCharms(await cRes.json());
@@ -130,15 +133,16 @@ export default function AdminCharms() {
       name: charm.name,
       category: catId,
       description: "",
-      price: charm.price,
-      stock: charm.stock,
-      weight: 10,
+      price: charm.price != null ? String(charm.price) : "",
+      stock: charm.stock != null ? String(charm.stock) : "",
+      weight: "10",
       imageFile: null,
       imagePreview: imageUrl,
       imagePublicId: charm.image?.publicId ?? "",
       imageSecureUrl: imageUrl,
       discountEnabled: charm.discount?.enabled ?? false,
-      discountValue: charm.discount?.value ?? 0,
+      discountValue:
+        charm.discount?.value != null ? String(charm.discount.value) : "",
       discountStartAt: charm.discount?.startAt
         ? new Date(charm.discount.startAt).toISOString().slice(0, 16)
         : "",
@@ -155,8 +159,8 @@ export default function AdminCharms() {
   const reload = async () => {
     try {
       const [cRes, catRes] = await Promise.all([
-        fetch("/api/charms"),
-        fetch("/api/categories"),
+        fetch("/api/charms", { cache: "no-store" }),
+        fetch("/api/categories", { cache: "no-store" }),
       ]);
       if (cRes.ok) setCharms(await cRes.json());
       if (catRes.ok) {
@@ -173,6 +177,21 @@ export default function AdminCharms() {
       // ignore
     }
   };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await reload();
+    setRefreshing(false);
+  };
+
+  useRealtime(
+    [EventChannels.CHARM_UPDATED, EventChannels.CATEGORY_UPDATED],
+    {
+      intervalMs: 10000,
+      onEvent: () => void reload(),
+      onPoll: () => void reload(),
+    },
+  );
 
   const handleImageUpload = async (file: File): Promise<{ publicId: string; secureUrl: string } | null> => {
     const formData = new FormData();
@@ -219,7 +238,7 @@ export default function AdminCharms() {
       ? {
           enabled: true,
           type: "PERCENTAGE",
-          value: form.discountValue,
+          value: Math.min(100, Number(form.discountValue) || 0),
           ...(form.discountStartAt
             ? { startAt: new Date(form.discountStartAt).toISOString() }
             : {}),
@@ -233,9 +252,9 @@ export default function AdminCharms() {
       name: form.name,
       slug: toSlug(form.name),
       category: form.category || undefined,
-      price: form.price,
-      stock: form.stock,
-      weight: form.weight,
+      price: Number(form.price) || 0,
+      stock: Number(form.stock) || 0,
+      weight: Number(form.weight) || 0,
       description: form.description,
       image,
       discount: discountPayload,
@@ -288,6 +307,30 @@ export default function AdminCharms() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <h1 className="text-2xl font-bold">Charms</h1>
         <div className="flex gap-3">
+          <button
+            onClick={handleRefresh}
+            aria-label="Refresh"
+            title="Refresh"
+            className="h-10 w-10 shrink-0 rounded-full border border-white/20 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/40 transition-colors"
+          >
+            {refreshing ? (
+              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+              </svg>
+            )}
+          </button>
           <input
             placeholder="Search charms..."
             value={searchQuery}
@@ -356,8 +399,8 @@ export default function AdminCharms() {
               <input
                 type="number"
                 placeholder="35000"
-                value={form.price === 0 ? 0 : form.price || ""}
-                onChange={(e) => setForm((f) => ({ ...f, price: Number(e.target.value) }))}
+                value={form.price}
+                onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
                 className="w-full h-11 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none focus:border-white/30"
                 min={0}
               />
@@ -367,8 +410,8 @@ export default function AdminCharms() {
               <input
                 type="number"
                 placeholder="10"
-                value={form.stock === 0 ? 0 : form.stock || ""}
-                onChange={(e) => setForm((f) => ({ ...f, stock: Number(e.target.value) }))}
+                value={form.stock}
+                onChange={(e) => setForm((f) => ({ ...f, stock: e.target.value }))}
                 className="w-full h-11 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none focus:border-white/30"
                 min={0}
               />
@@ -378,8 +421,8 @@ export default function AdminCharms() {
               <input
                 type="number"
                 placeholder="10"
-                value={form.weight === 0 ? 0 : form.weight || ""}
-                onChange={(e) => setForm((f) => ({ ...f, weight: Number(e.target.value) }))}
+                value={form.weight}
+                onChange={(e) => setForm((f) => ({ ...f, weight: e.target.value }))}
                 className="w-full h-11 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none focus:border-white/30"
                 min={0}
               />
@@ -444,9 +487,10 @@ export default function AdminCharms() {
                     <div className="relative">
                       <input
                         type="number"
+                        step="0.1"
                         placeholder="10"
-                        value={form.discountValue === 0 ? 0 : form.discountValue || ""}
-                        onChange={(e) => setForm((f) => ({ ...f, discountValue: Math.min(100, Number(e.target.value)) }))}
+                        value={form.discountValue}
+                        onChange={(e) => setForm((f) => ({ ...f, discountValue: e.target.value }))}
                         className="w-full h-11 rounded-xl bg-white/[0.05] border border-white/10 px-4 pr-8 text-sm outline-none focus:border-white/30"
                         min={0}
                         max={100}
@@ -455,24 +499,28 @@ export default function AdminCharms() {
                     </div>
                   </div>
 
-                  {form.discountValue > 0 && (
-                    <div className="flex-1 pt-4">
-                      <p className="text-[11px] text-neutral-500 mb-1">Price after discount</p>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm line-through text-red-400/60">
-                          Rp{form.price.toLocaleString("id-ID")}
-                        </span>
-                        <span className="text-sm font-semibold text-red-400">
-                          Rp{Math.round(form.price - (form.price * form.discountValue) / 100).toLocaleString("id-ID")}
-                        </span>
-                      </div>
-                      {form.discountStartAt && form.discountEndAt && (
-                        <div className="mt-2">
-                          <CountdownTimer startAt={form.discountStartAt} endAt={form.discountEndAt} />
+                  {(() => {
+                    const price = Number(form.price) || 0;
+                    const discountValue = Math.min(100, Number(form.discountValue) || 0);
+                    return discountValue > 0 ? (
+                      <div className="flex-1 pt-4">
+                        <p className="text-[11px] text-neutral-500 mb-1">Price after discount</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm line-through text-red-400/60">
+                            Rp{price.toLocaleString("id-ID")}
+                          </span>
+                          <span className="text-sm font-semibold text-red-400">
+                            Rp{Math.round(price - (price * discountValue) / 100).toLocaleString("id-ID")}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  )}
+                        {form.discountStartAt && form.discountEndAt && (
+                          <div className="mt-2">
+                            <CountdownTimer startAt={form.discountStartAt} endAt={form.discountEndAt} />
+                          </div>
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">

@@ -7,6 +7,7 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const status = searchParams.get("status") ?? undefined;
+    const search = searchParams.get("q") ?? undefined;
     const limit = searchParams.get("limit")
       ? parseInt(searchParams.get("limit")!)
       : undefined;
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
 
     const result = await getOrders({
       status: status as OrderStatus | undefined,
+      search,
       limit,
       offset,
     });

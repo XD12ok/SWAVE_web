@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRealtime } from "@/hooks/use-realtime";
+import { EventChannels } from "@/lib/events";
 
 interface CharmStock {
   _id: string;
@@ -19,67 +21,77 @@ export default function AdminInventory() {
   const [items, setItems] = useState<CharmStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
 
   const [editing, setEditing] = useState<string | null>(null);
-  const [editStock, setEditStock] = useState(0);
-  const [editReserved, setEditReserved] = useState(0);
-  const [editAvailable, setEditAvailable] = useState(0);
-  const [editSold, setEditSold] = useState(0);
+  const [editStock, setEditStock] = useState("");
+  const [editReserved, setEditReserved] = useState("");
+  const [editAvailable, setEditAvailable] = useState("");
+  const [editSold, setEditSold] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!opts?.silent) setLoading(true);
     try {
-      const res = await fetch("/api/inventory");
+      const res = await fetch("/api/inventory", { cache: "no-store" });
       if (res.ok) setItems(await res.json());
     } catch (err) {
       console.error("Failed to load inventory:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
     (async () => {
-      setLoading(true);
-      try {
-        const res = await fetch("/api/inventory");
-        if (res.ok && !cancelled) setItems(await res.json());
-      } catch (err) {
-        console.error("Failed to load inventory:", err);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      await load();
     })();
-    return () => { cancelled = true; };
-  }, []);
+  }, [load]);
+
+  const silentReload = useCallback(() => {
+    void load({ silent: true });
+  }, [load]);
+
+  useRealtime(
+    [EventChannels.CHARM_UPDATED],
+    {
+      intervalMs: 10000,
+      onEvent: silentReload,
+      onPoll: silentReload,
+    },
+  );
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await load();
+    setRefreshing(false);
+  };
 
   const startEdit = (item: CharmStock) => {
     setEditing(item._id);
-    setEditStock(item.stock);
-    setEditReserved(item.reservedStock);
-    setEditAvailable(item.available);
-    setEditSold(item.totalSold);
+    setEditStock(String(item.stock));
+    setEditReserved(String(item.reservedStock));
+    setEditAvailable(String(item.available));
+    setEditSold(String(item.totalSold));
   };
 
   const cancelEdit = () => {
     setEditing(null);
   };
 
-  const handleEditStock = (val: number) => {
+  const handleEditStock = (val: string) => {
     setEditStock(val);
-    setEditAvailable(val - editReserved);
+    setEditAvailable(String(Math.max(0, (Number(val) || 0) - (Number(editReserved) || 0))));
   };
 
-  const handleEditReserved = (val: number) => {
+  const handleEditReserved = (val: string) => {
     setEditReserved(val);
-    setEditAvailable(editStock - val);
+    setEditAvailable(String(Math.max(0, (Number(editStock) || 0) - (Number(val) || 0))));
   };
 
-  const handleEditAvailable = (val: number) => {
+  const handleEditAvailable = (val: string) => {
     setEditAvailable(val);
-    setEditStock(val + editReserved);
+    setEditStock(String((Number(val) || 0) + (Number(editReserved) || 0)));
   };
 
   const saveEdit = async (id: string) => {
@@ -89,9 +101,9 @@ export default function AdminInventory() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          stock: editStock,
-          reservedStock: editReserved,
-          totalSold: editSold,
+          stock: Number(editStock) || 0,
+          reservedStock: Number(editReserved) || 0,
+          totalSold: Number(editSold) || 0,
         }),
       });
       if (res.ok) {
@@ -123,12 +135,38 @@ export default function AdminInventory() {
       <div>
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <h1 className="text-2xl font-bold">Inventory</h1>
-          <input
-            placeholder="Search charms..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 flex-1 min-w-0"
-          />
+          <div className="flex gap-3 items-center">
+            <button
+              onClick={handleRefresh}
+              aria-label="Refresh"
+              title="Refresh"
+              className="h-10 w-10 shrink-0 rounded-full border border-white/20 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/40 transition-colors"
+            >
+              {refreshing ? (
+                <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  className="h-4 w-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                  <polyline points="21 3 21 9 15 9" />
+                </svg>
+              )}
+            </button>
+            <input
+              placeholder="Search charms..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 flex-1 min-w-0"
+            />
+          </div>
         </div>
         <div className="text-center py-24 text-neutral-500">
           <p className="text-lg">{items.length === 0 ? "No inventory data yet" : "No items match your search"}</p>
@@ -141,12 +179,38 @@ export default function AdminInventory() {
     <div>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <h1 className="text-2xl font-bold">Inventory</h1>
-        <input
-          placeholder="Search charms..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-full md:w-64"
-        />
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={handleRefresh}
+            aria-label="Refresh"
+            title="Refresh"
+            className="h-10 w-10 shrink-0 rounded-full border border-white/20 flex items-center justify-center text-neutral-400 hover:text-white hover:border-white/40 transition-colors"
+          >
+            {refreshing ? (
+              <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-4 w-4"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+                <polyline points="21 3 21 9 15 9" />
+              </svg>
+            )}
+          </button>
+          <input
+            placeholder="Search charms..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-10 rounded-xl bg-white/[0.05] border border-white/10 px-4 text-sm outline-none text-neutral-300 placeholder:text-neutral-500 w-full md:w-64"
+          />
+        </div>
       </div>
 
         <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-x-auto">
@@ -192,7 +256,7 @@ export default function AdminInventory() {
                       <input
                         type="number"
                         value={editStock}
-                        onChange={(e) => handleEditStock(Number(e.target.value))}
+                        onChange={(e) => handleEditStock(e.target.value)}
                         className="w-20 h-8 rounded-lg bg-white/[0.08] border border-white/20 px-2 text-right text-sm outline-none focus:border-white/40"
                         min={0}
                       />
@@ -206,7 +270,7 @@ export default function AdminInventory() {
                       <input
                         type="number"
                         value={editReserved}
-                        onChange={(e) => handleEditReserved(Number(e.target.value))}
+                        onChange={(e) => handleEditReserved(e.target.value)}
                         className="w-20 h-8 rounded-lg bg-white/[0.08] border border-white/20 px-2 text-right text-sm outline-none focus:border-white/40"
                         min={0}
                       />
@@ -220,7 +284,7 @@ export default function AdminInventory() {
                       <input
                         type="number"
                         value={editAvailable}
-                        onChange={(e) => handleEditAvailable(Number(e.target.value))}
+                        onChange={(e) => handleEditAvailable(e.target.value)}
                         className="w-20 h-8 rounded-lg bg-white/[0.08] border border-white/20 px-2 text-right text-sm outline-none focus:border-white/40"
                         min={0}
                       />
@@ -244,7 +308,7 @@ export default function AdminInventory() {
                       <input
                         type="number"
                         value={editSold}
-                        onChange={(e) => setEditSold(Number(e.target.value))}
+                        onChange={(e) => setEditSold(e.target.value)}
                         className="w-20 h-8 rounded-lg bg-white/[0.08] border border-white/20 px-2 text-right text-sm outline-none focus:border-white/40"
                         min={0}
                       />

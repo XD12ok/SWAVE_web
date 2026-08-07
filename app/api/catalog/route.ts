@@ -11,12 +11,7 @@ export async function GET() {
       getCategories(),
     ]);
 
-    return NextResponse.json(
-      { charms, categories },
-      {
-        headers: { "Cache-Control": "public, max-age=120, s-maxage=120" },
-      },
-    );
+    return NextResponse.json({ charms, categories });
   } catch {
     return NextResponse.json({ charms: [], categories: [] });
   }
